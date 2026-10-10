@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { FileText, Upload } from 'lucide-react'
+import { FileText, Upload, Film } from 'lucide-react'
+import VideoImport from '../components/VideoImport'
 import type { ImportPick, ImportPreview } from '../../../shared/ipc'
 import { useProject } from '../state/project'
 
@@ -9,6 +10,7 @@ export default function SourceView() {
   const [picks, setPicks] = useState<Record<number, { on: boolean; seq: string; ep: string }>>({})
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [videoOpen, setVideoOpen] = useState(() => new URLSearchParams(window.location.search).get('video') === '1')
 
   async function pick() {
     setErr(null)
@@ -58,18 +60,29 @@ export default function SourceView() {
         <div className="flex items-center justify-between">
           <div>
             <div className="text-[14px] font-semibold">소스</div>
-            <div className="text-[12px] text-muted">시나리오(PDF / .txt / .md)를 넣으면 씬을 나눠 시퀀스로 만듭니다. 체크를 끄면 그 씬은 앞 씬에 합쳐집니다.</div>
+            <div className="text-[12px] text-muted">시나리오(PDF / .txt / .md)를 넣으면 씬을 나눠 시퀀스로 만듭니다. 영상 콘티(애니매틱·샷별 클립·롱테이크·대사 음성)는 컷과 대사를 찾아 원본 프레임으로 콘티를 채웁니다.</div>
           </div>
-          <button
-            disabled={busy}
-            onClick={() => void pick()}
-            className="flex items-center gap-2 rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-50"
-          >
-            <Upload size={14} /> 시나리오 가져오기
-          </button>
+          <div className="flex shrink-0 gap-2">
+            <button
+              disabled={busy}
+              onClick={() => setVideoOpen(true)}
+              className="flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-[12.5px] hover:bg-panel-2 disabled:opacity-50"
+            >
+              <Film size={14} /> 영상 가져오기
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => void pick()}
+              className="flex items-center gap-2 rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-50"
+            >
+              <Upload size={14} /> 시나리오 가져오기
+            </button>
+          </div>
         </div>
         {err && <div className="mt-3 rounded-md border border-red-900/60 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">{err}</div>}
       </section>
+
+      {videoOpen && !preview && <VideoImport onClose={() => setVideoOpen(false)} />}
 
       {preview && (
         <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-line bg-panel">
@@ -138,7 +151,7 @@ export default function SourceView() {
         </section>
       )}
 
-      {!preview && (
+      {!preview && !videoOpen && (
         <section className="rounded-lg border border-line bg-panel p-4">
           <div className="mb-2 text-[12.5px] font-medium">현재 시퀀스 {sequences.length}개</div>
           {sequences.length === 0 ? (

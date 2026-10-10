@@ -45,7 +45,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     setProject(cur.project)
     const list = await api.sequence.list()
     setSequences(list)
-    setSeqRaw((prev) => (prev && list.some((s) => s.seq === prev) ? prev : (list[0]?.seq ?? null)))
+    const want = new URLSearchParams(window.location.search).get('seq')
+    setSeqRaw((prev) => (prev && list.some((s) => s.seq === prev) ? prev : want && list.some((s) => s.seq === want) ? want : (list[0]?.seq ?? null)))
   }, [api])
 
   const guard = useCallback(

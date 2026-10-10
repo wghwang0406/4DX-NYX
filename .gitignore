@@ -18,3 +18,10 @@ Thumbs.db
 .env.*
 /tmp/
 .claude/settings.local.json
+
+# 패키징 산출물
+release/
+apps/studio/.stage/
+apps/studio/.build-res/
+apps/studio/.builder.json
+apps/viewer/dist/

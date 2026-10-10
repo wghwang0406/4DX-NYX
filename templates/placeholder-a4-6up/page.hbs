@@ -1,0 +1,24 @@
+{{#each pages}}
+<section class="page">
+  <header class="hd">
+    <div class="hd-l">
+      <span class="seq">{{../sequence.seq}}</span>
+      <span class="place">{{../sequence.place}}</span>
+      {{#if ../sequence.time}}<span class="time">{{../sequence.time}}</span>{{/if}}
+    </div>
+    <div class="hd-r">
+      <span>{{../project.title}}</span><span class="dot">·</span><span>{{../sequence.ep}}</span>
+      {{#if ../meta.versionLabel}}<span class="dot">·</span><span>{{../meta.versionLabel}}</span>{{/if}}
+      <span class="dot">·</span><span>{{../meta.date}}</span>
+    </div>
+  </header>
+  <main class="grid">
+    {{#each panels}}{{> panel}}{{/each}}
+  </main>
+  <footer class="ft">
+    <span>{{../project.code}} {{../sequence.seq}} · {{../sequence.shotCount}}컷 · {{../sequence.duration}}</span>
+    <span class="status">{{../meta.status}}</span>
+    <span>{{n}} / {{total}}</span>
+  </footer>
+</section>
+{{/each}}

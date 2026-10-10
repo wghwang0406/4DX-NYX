@@ -249,7 +249,12 @@ async function planRestyle(ctx: PlanContext, a: { seq: string; shotNos: string[]
   const style = project.defaults.contiStyle
   const built = restylePrompt(styleLineFor(project, style))
   const plans: JobPlan[] = a.shotNos.map((no) => {
-    const { shot, file, versionId } = requireCurrent(seq, no)
+    const cur = requireCurrent(seq, no)
+    // 다시 그리기는 원본 프레임에서 — 이미 그린 버전 위에 또 그리면 그림이 뭉개진다
+    const orig = cur.shot.panels[0]?.versions.conti.find((v) => v.source === 'video_frame')
+    const { shot } = cur
+    const file = orig?.file ?? cur.file
+    const versionId = orig?.id ?? cur.versionId
     return {
       kind: 'panel_restyle',
       target: { type: 'shot', ep: seq.ep, seq: seq.seq, shotId: shot.id, shotNo: shot.no },

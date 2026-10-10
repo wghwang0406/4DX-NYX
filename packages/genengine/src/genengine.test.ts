@@ -402,8 +402,14 @@ describe('JobService (fake CLI, zero credits)', () => {
     const svcA = new JobService({ store, cli, pollMs: 100_000, concurrency: 3 }) // 느린 폴링 → submitted 에 머문다
     await svcA.init()
     const jobs = await svcA.submit('req-r', r.plans.slice(0, 1))
-    await new Promise((res) => setTimeout(res, 800))
-    expect((await readFile(join(root, '.conti', 'jobs', `${jobs[0].id}.json`), 'utf8')).includes('"status": "submitted"') || (await readFile(join(root, '.conti', 'jobs', `${jobs[0].id}.json`), 'utf8')).includes('"status": "running"')).toBe(true)
+    // 고정 대기 대신 폴링 — 부하가 걸린 머신에서도 제출 기록이 디스크에 생길 때까지 (최대 10초)
+    const recPath = join(root, '.conti', 'jobs', `${jobs[0].id}.json`)
+    let rec = ''
+    for (let i = 0; i < 100 && !/"status": "(submitted|running)"/.test(rec); i++) {
+      await new Promise((res) => setTimeout(res, 100))
+      rec = await readFile(recPath, 'utf8')
+    }
+    expect(rec).toMatch(/"status": "(submitted|running)"/)
     await svcA.stop()
     // 2) 'submitting' 기록을 손으로 만든다 — create 는 서버에 들어갔지만 id 를 못 적은 상황
     const remote = await cli.create('gpt_image_2_5', { aspect_ratio: '16:9' }, r.plans[1].prompt)

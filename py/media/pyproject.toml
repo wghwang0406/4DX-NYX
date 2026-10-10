@@ -1,0 +1,24 @@
+[project]
+name = "conti-media"
+version = "0.1.0"
+description = "NYX 영상 콘티 분석 — 컷·카메라·키프레임·시트 (로컬 측정, 토큰 0) + 선택적 음성 인식"
+requires-python = ">=3.9,<3.14"
+dependencies = [
+  "numpy>=1.26",
+  "opencv-python-headless>=4.10,<5",
+  "scenedetect>=0.6.7,<0.8",
+  "Pillow>=10",
+]
+
+[project.optional-dependencies]
+asr = ["faster-whisper>=1.1,<2", "av>=12,<14"]  # faster-whisper 1.2 는 av 14+ 에서 open(metadata_errors=) 로 실패
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["conti_media"]
+
+[tool.uv]
+package = true

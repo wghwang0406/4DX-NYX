@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
+import { RefreshCw, CheckCircle2, XCircle, AlertCircle, PackageOpen } from 'lucide-react'
 import type { ToolStatus } from '../../../shared/ipc'
 
 const LABEL: Record<ToolStatus['name'], string> = {
@@ -21,6 +21,11 @@ const HINT: Record<ToolStatus['name'], string> = {
 export default function DiagnosticsView() {
   const [tools, setTools] = useState<ToolStatus[] | null>(null)
   const [busy, setBusy] = useState(false)
+  const [exported, setExported] = useState<string | null>(null)
+  const [version, setVersion] = useState('')
+  useEffect(() => {
+    void window.conti.app?.version().then(setVersion)
+  }, [])
 
   async function load() {
     setBusy(true)
@@ -42,10 +47,21 @@ export default function DiagnosticsView() {
             <div className="text-[14px] font-semibold">진단</div>
             <div className="text-[12px] text-muted">앱이 쓰는 외부 도구 버전·경로·로그인 상태. 로그인은 계정 탭에서.</div>
           </div>
-          <button onClick={() => void load()} disabled={busy} className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[12px] hover:bg-panel-2">
-            <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> 다시 확인
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => void window.conti.app.exportDiagnostics().then(setExported).catch((e: Error) => setExported(`실패: ${e.message}`))}
+              title="버전·도구·로그인 상태(이메일 가림)·최근 오류·로그를 바탕화면 zip 으로 — 토큰은 넣지 않습니다"
+              className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[12px] hover:bg-panel-2"
+            >
+              <PackageOpen size={13} /> 진단 내보내기
+            </button>
+            <button onClick={() => void load()} disabled={busy} className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[12px] hover:bg-panel-2">
+              <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> 다시 확인
+            </button>
+          </div>
         </div>
+        {exported && <div className="mt-2 text-[12px] text-muted">{exported.startsWith('실패') ? exported : `저장됨: ${exported} — 문제를 알릴 때 이 파일을 보내 주세요`}</div>}
+        {version && <div className="mt-1 text-[11px] text-muted">NYX {version}</div>}
         <table className="mt-4 w-full text-[12.5px]">
           <tbody>
             {(tools ?? []).map((t) => (

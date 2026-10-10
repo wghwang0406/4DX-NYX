@@ -70,6 +70,9 @@ image_edit {"seq":"S41","shotNo":"0030","model":"nano","instructionEn":"Edit the
 panels_annotate {"seq":"S41","shotNo":"0030","annotations":[{"type":"pan","points":[[0.2,0.5],[0.8,0.5]],"label":"pan right"}]}
 ```
 
+- 좌표는 이미지 기준 0..1. `move`(인물 이동, 빨강)·`camera`/`pan`/`tilt`(카메라, 파랑 점선)는 점 2개 이상(곡선이면 3–6개), `zoom`(끝 프레임)·`frame`은 점 2개(좌상·우하), `note`는 점 1개 + label.
+- 기본은 덧붙이기. 다시 그리려면 `replace:true`, 지우려면 `panels_update{removeIds|clearAnnotations}`. 주석은 시트·PDF에 이미지 위로 그려지고 **재생성 대상이 아니다**(크레딧 0).
+
 ## 마무리 문장
 
 항상: 바뀐 샷 번호 + 바뀐 필드 + (유료면) "승인 카드에서 승인해 주세요" + (무료 수정이면) "재생성이 필요하면 말씀하세요". 사용자가 "앞뒤 컷도"라고 하면 UI 카드의 `[앞뒤 컷 포함]` 체크를 안내한다 — 네가 목록을 늘리지 않는다.

@@ -1,7 +1,7 @@
 {
   "name": "@conti/studio",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "NYX — 콘티 제작 데스크톱 앱 (Electron)",
   "main": "./out/main/index.js",
   "scripts": {
@@ -11,16 +11,19 @@
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
-    "lucide-react": "^1.54.0",
-    "cross-spawn": "^7.0.6",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "@conti/agents": "workspace:*",
     "@conti/core": "workspace:*",
     "@conti/domain": "workspace:*",
-    "@conti/screenplay": "workspace:*",
+    "@conti/genengine": "workspace:*",
+    "@conti/layout": "workspace:*",
     "@conti/mcp": "workspace:*",
-    "@conti/agents": "workspace:*",
-    "@conti/genengine": "workspace:*"
+    "@conti/media": "workspace:*",
+    "@conti/screenplay": "workspace:*",
+    "cross-spawn": "^7.0.6",
+    "handlebars": "^4.7.10",
+    "lucide-react": "^1.54.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -29,9 +32,11 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.7"
-  }
+  },
+  "productName": "NYX"
 }

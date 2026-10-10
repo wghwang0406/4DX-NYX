@@ -1,0 +1,18 @@
+# 사내 서버에서:  NYX_PUBLISH_TOKEN=$(openssl rand -hex 24) docker compose -f apps/viewer/docker-compose.yml up -d
+services:
+  viewer:
+    build: { context: ../.., dockerfile: apps/viewer/Dockerfile }
+    restart: unless-stopped
+    ports: ["8787:8787"]
+    volumes: ["nyx-data:/data"]
+    environment:
+      NYX_PUBLISH_TOKEN: ${NYX_PUBLISH_TOKEN:?팀 게시 토큰을 정하세요 (스튜디오 설정에 같은 값)}
+      NYX_PUBLIC_URL: ${NYX_PUBLIC_URL:-}
+      # Dropbox 보관 (둘 중 하나). 없으면 서버에만 보관
+      DROPBOX_TOKEN: ${DROPBOX_TOKEN:-}
+      DROPBOX_REFRESH_TOKEN: ${DROPBOX_REFRESH_TOKEN:-}
+      DROPBOX_APP_KEY: ${DROPBOX_APP_KEY:-}
+      DROPBOX_APP_SECRET: ${DROPBOX_APP_SECRET:-}
+      DROPBOX_ROOT: ${DROPBOX_ROOT:-/NYX}
+volumes:
+  nyx-data:

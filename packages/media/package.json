@@ -1,0 +1,26 @@
+{
+  "name": "@conti/media",
+  "private": true,
+  "version": "0.0.1",
+  "description": "영상 콘티 → 이미지 콘티 (플랜 §4) — ffmpeg 프록시·키프레임, uv 로 py/media 측정 호출, 샷 병합, AI 1·2차 분석",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@conti/agents": "workspace:*",
+    "@conti/core": "workspace:*",
+    "@conti/domain": "workspace:*",
+    "cross-spawn": "^7.0.6",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^26.6.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

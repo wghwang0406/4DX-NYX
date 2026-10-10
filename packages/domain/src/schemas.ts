@@ -72,6 +72,7 @@ export const Annotation = z.object({
   points: z.array(z.tuple([z.number(), z.number()])), // 0..1
   label: z.string().optional(),
 })
+export type Annotation = z.infer<typeof Annotation>
 
 export const Panel = z.object({
   id: z.string(),
@@ -133,6 +134,8 @@ export const Sequence = z.object({
       lineEnd: z.number().optional(),
       textHash: z.string().optional(),
       kind: z.enum(['screenplay', 'video', 'images']).optional(),
+      /** 영상 입력: 재생용 프록시 (프로젝트 상대경로, 올-키프레임 960px) */
+      proxy: z.string().optional(),
     })
     .default({}),
   locationMapEn: z.string().default(''),

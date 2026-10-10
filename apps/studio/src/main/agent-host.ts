@@ -10,6 +10,7 @@ import { ProjectStore, writeAtomic, exists, readText } from '@conti/core'
 import { assetJobCount } from '@conti/domain'
 import { JobService, ModelTable, RealHiggsfieldCli, planRequest, type JobEvent, type JobRecord } from '@conti/genengine'
 import type { AgentAvailability, AgentUiEvent, ChatMessage, JobView, SpendPreview, SpendRequestView, ThreadInfo } from '../shared/agent-ipc'
+import type { FeedbackItem } from '../shared/publish-ipc'
 
 interface LiveThread {
   info: ThreadInfo
@@ -50,6 +51,11 @@ export class AgentHost {
     private getWindow: () => BrowserWindow | null,
     /** 테스트·검증용으로 CLI 를 바꿔 끼운다 (기본 실제 higgsfield) */
     private makeCli: () => ConstructorParameters<typeof JobService>[0]['cli'] = () => new RealHiggsfieldCli({ bin: process.env.CONTI_HIGGSFIELD_BIN || undefined }),
+    /** 뷰어 피드백 (게시 서버) — MCP feedback_list / feedback_update */
+    private feedback?: {
+      list(f: { seq?: string; state?: 'open' | 'applied' | 'declined' | 'all' }): Promise<FeedbackItem[]>
+      update(id: string, state: 'open' | 'applied' | 'declined', o: { note?: string; versionId?: string }): Promise<FeedbackItem>
+    },
   ) {}
 
   /** 번들 위치: 개발 중엔 저장소의 agent-bundle, 패키징 후엔 resources/agent-bundle */
@@ -92,6 +98,8 @@ export class AgentHost {
           this.spends.set(view.requestId, view)
           this.emit({ t: 'spend', request: view })
         },
+        feedbackList: this.feedback ? (f) => this.feedback!.list(f) : undefined,
+        feedbackUpdate: this.feedback ? (id, state, o) => this.feedback!.update(id, state, o) : undefined,
         jobsForRequest: (requestId): McpJobView[] =>
           (this.jobsvc?.list(requestId) ?? []).map((j) => ({ id: j.id, status: j.status, target: targetLabel(j), model: j.model, outFile: j.outFile, error: j.error, lint: j.lint.length ? j.lint : undefined })),
       },
@@ -304,6 +312,16 @@ export class AgentHost {
     this.threads.delete(threadId)
   }
 
+  /** 뷰어 피드백 반영 작업 — feedback-apply 스킬. 코멘트 본문은 프롬프트에 넣지 않고 도구로 읽게 한다(외부 입력 격리). */
+  async feedbackTask(seq: string, commentIds?: string[]): Promise<{ threadId: string }> {
+    const kind = (await pickAvailable('claude')) ?? (await pickAvailable('codex'))
+    if (!kind) throw new Error('로그인된 AI CLI 가 없습니다 (claude 또는 codex)')
+    const info = await this.open({ agent: kind, seq, mode: 'chat' })
+    const only = commentIds?.length ? ` 이번엔 이 코멘트만: ${commentIds.join(', ')}.` : ''
+    await this.send(info.id, `conti:feedback-apply 스킬로 ${seq} 의 열린 뷰어 코멘트를 반영해줘.${only} feedback_list 로 읽고, 변경안 표를 먼저 보여준 뒤 내 확인을 받아. 유료 작업은 승인 카드로.`, { seq })
+    return { threadId: info.id }
+  }
+
   // ── 작업 버튼 (headless 1회) ────────────────────────────────────────────
   async runTask(task: 'setup' | 'breakdown', seq?: string): Promise<{ threadId: string }> {
     const kind = (await pickAvailable('claude')) ?? (await pickAvailable('codex'))
@@ -419,6 +437,11 @@ export class AgentHost {
         this.mcp.createSpendRequest((req?.kind ?? 'conti_generate') as SpendKind, rest.count, rest.args, e.requestId)
       }
     }
+  }
+
+  /** 검증용 — 스토어 직접 수정 (AI 반영 단계 대신) */
+  async updateShotForTest(seq: string, shotId: string, patch: Record<string, unknown>) {
+    await this.store.updateShot(seq, shotId, patch as never)
   }
 
   jobs(requestId?: string): JobView[] {

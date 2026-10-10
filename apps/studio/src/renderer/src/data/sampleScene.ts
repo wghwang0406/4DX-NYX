@@ -40,6 +40,7 @@ export interface Scene {
   project: string
   duration: number
   estimated?: boolean // 텍스트 입력이라 길이가 추정값
+  video?: string // 영상 입력: 재생용 프록시 URL (conti-file://)
   shots: Shot[]
   dialogue: DialogueLine[]
   camera: CameraBlock[]

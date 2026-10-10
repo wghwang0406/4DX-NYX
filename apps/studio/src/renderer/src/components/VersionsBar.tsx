@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { History, RefreshCw, Check, AlertTriangle } from 'lucide-react'
+import { History, RefreshCw, Check, AlertTriangle, Brush } from 'lucide-react'
 import type { Sequence } from '@conti/domain'
 import { fileUrl } from '../data/adapters'
 import { useProject } from '../state/project'
@@ -21,6 +21,21 @@ export default function VersionsBar({ sequence, selectedShot }: Props) {
   const versions = shot.panels.flatMap((p) => p.versions.conti).sort((a, b) => a.n - b.n)
   const current = shot.stages.conti.currentVersionId
   const status = shot.stages.conti.status
+
+  const cur = versions.find((v) => v.id === current) ?? versions[versions.length - 1]
+  const original = versions.find((v) => v.source === 'video_frame')
+
+  async function restyle() {
+    setErr(null)
+    setBusy(true)
+    try {
+      await window.conti.agent.requestSpend('panel_restyle', { seq: sequence.seq, shotNos: [shot!.no] })
+    } catch (e) {
+      setErr((e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function regenerate() {
     setErr(null)
@@ -74,13 +89,23 @@ export default function VersionsBar({ sequence, selectedShot }: Props) {
           <AlertTriangle size={12} /> {err}
         </span>
       )}
+      {original && (
+        <button
+          disabled={busy || status === 'queued' || status === 'running'}
+          onClick={() => void restyle()}
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[12px] hover:bg-panel-2 disabled:opacity-50"
+          title={cur?.source === 'video_frame' ? '원본 프레임을 구도 그대로 콘티 그림체로 (승인 카드)' : '원본 프레임에서 다시 그리기 — v1 로 돌아가려면 버전을 고르면 됩니다 (크레딧 0)'}
+        >
+          <Brush size={13} /> 다시 그리기
+        </button>
+      )}
       <button
         disabled={busy || status === 'queued' || status === 'running'}
         onClick={() => void regenerate()}
         className="flex shrink-0 items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[12px] hover:bg-panel-2 disabled:opacity-50"
         title="이 컷만 다시 생성 (승인 카드)"
       >
-        <RefreshCw size={13} /> {versions.length ? '재생성' : '콘티 생성'}
+        <RefreshCw size={13} /> {versions.length ? (original ? '새로 생성' : '재생성') : '콘티 생성'}
       </button>
     </div>
   )

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Images, RefreshCw } from 'lucide-react'
+import { Images, RefreshCw, Brush } from 'lucide-react'
 import type { Sequence, Shot, ShotSize } from '@conti/domain'
 import { useProject } from '../state/project'
 
@@ -31,6 +31,12 @@ export default function ShotTable({ sequence, selectedShot, onSelect }: Props) {
   const shots = sequence.shots.filter((s) => !s.deleted)
   const needs = shots.filter((s) => ['none', 'prompt_ready', 'stale', 'failed'].includes(s.stages.conti.status))
   const style = project?.defaults.contiStyle ?? 'sketch'
+  // 영상 입력: 현재 버전이 원본 프레임인 컷 → 콘티 그림체로 다시 그리기
+  const frames = shots.filter((s) => {
+    const all = s.panels.flatMap((p) => p.versions.conti)
+    const cur = all.find((v) => v.id === s.stages.conti.currentVersionId)
+    return cur?.source === 'video_frame'
+  })
 
   async function patch(shot: Shot, p: Partial<Shot>) {
     await window.conti.api.sequence.updateShot(sequence.seq, shot.id, p)
@@ -54,6 +60,15 @@ export default function ShotTable({ sequence, selectedShot, onSelect }: Props) {
         </span>
         <span className="flex items-center gap-1.5">
           {err && <span className="text-[11px] text-red-300">{err}</span>}
+          {frames.length > 0 && (
+            <button
+              onClick={() => void window.conti.agent.requestSpend('panel_restyle', { seq: sequence.seq, shotNos: frames.map((s) => s.no) }).catch((e: Error) => setErr(e.message))}
+              className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11.5px] hover:bg-panel-2"
+              title="원본 프레임 컷을 구도 그대로 콘티 그림체로 (승인 카드에서 1장만 먼저 가능)"
+            >
+              <Brush size={12} /> 다시 그리기 ({frames.length})
+            </button>
+          )}
           <button
             disabled={!needs.length}
             onClick={() => void request(needs.map((s) => s.no))}

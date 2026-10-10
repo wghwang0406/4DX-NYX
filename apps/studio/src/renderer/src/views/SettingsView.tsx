@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, XCircle, LogIn, LogOut, RefreshCw, ExternalLink, Loader2, AlertTriangle, Stethoscope } from 'lucide-react'
+import { CheckCircle2, XCircle, LogIn, LogOut, RefreshCw, ExternalLink, Loader2, AlertTriangle, Stethoscope, Server } from 'lucide-react'
 import type { AccountStatus, AuthEvent, AuthTool, LoginOptions } from '../../../shared/auth-ipc'
 import DiagnosticsView from './DiagnosticsView'
 
@@ -24,7 +24,7 @@ export default function SettingsView() {
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
-  const [tab, setTab] = useState<'accounts' | 'tools'>('accounts')
+  const [tab, setTab] = useState<'accounts' | 'server' | 'tools'>(() => (new URLSearchParams(window.location.search).get('settings') as 'server' | null) ?? 'accounts')
 
   async function load() {
     setBusy(true)
@@ -85,12 +85,17 @@ export default function SettingsView() {
         <button onClick={() => setTab('accounts')} className={`rounded px-3 py-1 ${tab === 'accounts' ? 'bg-accent-soft text-ink' : 'text-muted hover:text-ink'}`}>
           계정
         </button>
+        <button onClick={() => setTab('server')} className={`flex items-center gap-1 rounded px-3 py-1 ${tab === 'server' ? 'bg-accent-soft text-ink' : 'text-muted hover:text-ink'}`}>
+          <Server size={12} /> 게시 서버
+        </button>
         <button onClick={() => setTab('tools')} className={`flex items-center gap-1 rounded px-3 py-1 ${tab === 'tools' ? 'bg-accent-soft text-ink' : 'text-muted hover:text-ink'}`}>
           <Stethoscope size={12} /> 도구 진단
         </button>
       </div>
       {tab === 'tools' ? (
         <DiagnosticsView />
+      ) : tab === 'server' ? (
+        <ServerSettings />
       ) : (
         <>
           <section className="flex items-center justify-between rounded-lg border border-line bg-panel p-4">
@@ -100,9 +105,14 @@ export default function SettingsView() {
                 각 도구의 공식 로그인(브라우저)을 여기서 띄웁니다. 앱은 비밀번호·토큰을 저장하지 않고, 로그인 상태는 각 CLI 가 자기 자리에 보관합니다.
               </div>
             </div>
-            <button onClick={() => void load()} disabled={busy} className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[12px] hover:bg-panel-2">
-              <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> 다시 확인
-            </button>
+            <div className="flex shrink-0 gap-2">
+              <button onClick={() => void window.conti.app.setSettings({ onboarded: false }).then(() => location.reload())} className="rounded-md border border-line px-3 py-1.5 text-[12px] text-muted hover:bg-panel-2 hover:text-ink">
+                처음 안내 다시 보기
+              </button>
+              <button onClick={() => void load()} disabled={busy} className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[12px] hover:bg-panel-2">
+                <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> 다시 확인
+              </button>
+            </div>
           </section>
 
           {(accounts ?? (['claude', 'codex', 'higgsfield'] as AuthTool[]).map((tool): AccountStatus => ({ tool, installed: true, loggedIn: false, busy: false }))).map((a) => {
@@ -218,3 +228,57 @@ export default function SettingsView() {
 }
 
 const clean = (e: unknown) => (e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
+
+/** 사내 뷰어 서버 — 주소 + 팀 게시 토큰 (토큰은 키체인으로 암호화해 이 맥에만) */
+export function ServerSettings() {
+  const [url, setUrl] = useState('')
+  const [token, setToken] = useState('')
+  const [hasToken, setHasToken] = useState(false)
+  const [encrypted, setEncrypted] = useState(true)
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    void window.conti.publish.settings().then((s) => {
+      setUrl(s.url)
+      setHasToken(s.hasToken)
+      setEncrypted(s.encrypted)
+    })
+  }, [])
+  async function save() {
+    setBusy(true)
+    setResult(null)
+    try {
+      await window.conti.publish.saveSettings(url, token || undefined)
+      setToken('')
+      setHasToken(hasToken || !!token)
+      setResult(await window.conti.publish.test())
+    } catch (e) {
+      setResult({ ok: false, message: clean(e) })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <section className="rounded-lg border border-line bg-panel p-4 text-[12.5px]">
+      <div className="text-[14px] font-semibold">게시 서버</div>
+      <div className="mt-0.5 text-[12px] text-muted">사내 뷰어 서버에 시트·PDF·영상을 올리고 링크로 공유합니다. 서버가 Dropbox 팀 폴더에 보관하므로 이 맥에는 Dropbox 설정이 필요 없습니다.</div>
+      <div className="mt-3 grid max-w-xl grid-cols-[90px_1fr] items-center gap-2">
+        <span className="text-muted">서버 주소</span>
+        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://nyx.사내:8787" className="rounded border border-line bg-bg px-2 py-1 font-mono text-[12px] outline-none focus:border-accent" />
+        <span className="text-muted">게시 토큰</span>
+        <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder={hasToken ? '저장됨 — 바꿀 때만 입력' : '서버의 NYX_PUBLISH_TOKEN'} className="rounded border border-line bg-bg px-2 py-1 font-mono text-[12px] outline-none focus:border-accent" />
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        <button disabled={busy || !url} onClick={() => void save()} className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-50">
+          {busy ? <Loader2 size={13} className="animate-spin" /> : null} 저장하고 연결 확인
+        </button>
+        {!encrypted && <span className="text-[11px] text-warn">이 기기에선 키체인 암호화를 쓸 수 없어 토큰이 평문으로 저장됩니다</span>}
+      </div>
+      {result && (
+        <div className={`mt-3 flex items-center gap-1.5 text-[12px] ${result.ok ? 'text-emerald-400' : 'text-red-300'}`}>
+          {result.ok ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />} {result.message}
+        </div>
+      )}
+    </section>
+  )
+}

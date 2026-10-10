@@ -1,4 +1,4 @@
-import type { Sequence } from '@conti/domain'
+import { estimateShotDuration, type Sequence } from '@conti/domain'
 import type { Scene, Shot, DialogueLine, CameraBlock } from './sampleScene'
 
 const DEFAULT_SHOT_SEC = 2.5
@@ -84,16 +84,12 @@ export function sequenceToScene(seq: Sequence, projectTitle: string): Scene {
     project: projectTitle,
     duration: Math.max(t, 1),
     estimated,
+    video: seq.source.kind === 'video' && seq.source.proxy ? fileUrl(seq.source.proxy) : undefined,
     shots,
     dialogue,
     camera,
   }
 }
 
-/** 대사 글자 수(한국어 ≈ 초당 4~5자) + 지문 유무로 길이 추정. 사용자가 트랙에서 고친다. */
-export function estimateDuration(actionKo: string, dialogue: string[]): number {
-  const chars = dialogue.join('').replace(/\s/g, '').length
-  const fromDialogue = chars ? chars / 4.5 + 0.6 : 0
-  const fromAction = actionKo ? Math.min(4, 1.5 + actionKo.length / 40) : 0
-  return Math.max(DEFAULT_SHOT_SEC * 0.6, Math.round((fromDialogue + fromAction || DEFAULT_SHOT_SEC) * 10) / 10)
-}
+/** 길이 추정은 domain 의 estimateShotDuration 하나로 (레이아웃·애니매틱과 같은 값) */
+export const estimateDuration = estimateShotDuration

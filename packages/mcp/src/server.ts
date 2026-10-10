@@ -13,6 +13,8 @@ import { assetTools } from './tools/assets'
 import { specTools } from './tools/spec'
 import { imageTools } from './tools/image'
 import { jobTools, paidTools, uiTools } from './tools/jobs'
+import { panelTools } from './tools/panels'
+import { feedbackTools } from './tools/feedback'
 
 export interface ContiMcpOptions {
   store: ProjectStore
@@ -35,7 +37,7 @@ export interface ContiMcp {
 export const MCP_PATH = '/mcp'
 const BODY_LIMIT = 8 * 1024 * 1024
 
-export const ALL_TOOLS = [...projectTools, ...sequenceTools, ...shotTools, ...assetTools, ...specTools, ...imageTools, ...uiTools, ...paidTools, ...jobTools]
+export const ALL_TOOLS = [...projectTools, ...sequenceTools, ...shotTools, ...panelTools, ...assetTools, ...specTools, ...imageTools, ...uiTools, ...paidTools, ...jobTools, ...feedbackTools]
 export const TOOL_NAMES = ALL_TOOLS.map((t) => t.name)
 
 function buildMcpServer(ctx: Ctx): McpServer {

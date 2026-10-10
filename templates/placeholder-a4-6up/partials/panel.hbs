@@ -1,0 +1,24 @@
+{{#if empty}}
+<div class="cell empty"></div>
+{{else}}
+<article class="cell{{#if stale}} stale{{/if}}" data-shot="{{shotNo}}" data-panel="{{panelIndex}}">
+  <div class="cell-top">
+    <span class="no">{{panelLabel}}</span>
+    <span class="chips">{{#each chips}}<span class="chip">{{this}}</span>{{/each}}</span>
+  </div>
+  <div class="frame">
+    {{#if image}}<img src="{{image}}" alt="{{panelLabel}}">{{else}}<div class="noimg">콘티 없음</div>{{/if}}
+    {{{annotationsSvg}}}
+    {{#if version}}<span class="ver">{{version}}{{#if imageSource}} · {{imageSource}}{{/if}}</span>{{/if}}
+  </div>
+  <div class="text">
+    {{#if hasDialogue}}
+      {{#each dialogue}}<p class="dlg"><b>{{speaker}}</b>{{#if paren}} <i>({{paren}})</i>{{/if}} {{text}}</p>{{/each}}
+      {{#if action}}<p class="act small">{{action}}</p>{{/if}}
+    {{else}}
+      <p class="act">{{action}}</p>
+    {{/if}}
+  </div>
+  {{#if tc}}<div class="tc">{{tc}}</div>{{/if}}
+</article>
+{{/if}}

@@ -1,5 +1,5 @@
 // 메인 ↔ 렌더러 계약. 양쪽이 이 타입만 본다.
-import type { Asset, Project, Sequence, Shot } from '@conti/domain'
+import type { Annotation, Asset, Project, Sequence, Shot } from '@conti/domain'
 import type { SceneChunk } from '@conti/screenplay'
 
 export interface ToolStatus {
@@ -53,6 +53,8 @@ export interface Api {
     updateShot(seq: string, shotId: string, patch: Partial<Shot>): Promise<Sequence>
     /** 버전 기록에서 현재 콘티 버전을 바꾼다 (크레딧 0) */
     setCurrentVersion(seq: string, shotId: string, versionId: string): Promise<Sequence>
+    /** 패널 주석(화살표·프레임·메모) 교체 — 크레딧 0, 재생성 표시 없음 */
+    setAnnotations(seq: string, shotId: string, panelIndex: number, annotations: Annotation[]): Promise<Sequence>
   }
   screenplay: {
     importDialog(): Promise<ImportPreview | null>

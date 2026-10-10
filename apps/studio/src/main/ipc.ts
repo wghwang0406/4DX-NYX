@@ -9,6 +9,11 @@ import type { ImportPick, ImportPreview, StoreChange } from '../shared/ipc'
 import { toolStatuses } from './diag'
 import { AgentHost } from './agent-host'
 import { AuthManager } from './auth'
+import { LayoutService } from './layout'
+import { VideoService } from './video'
+import { PublishService } from './publish'
+import { AppInfo } from './appinfo'
+import type { ExportKind } from '../shared/layout-ipc'
 import type { AuthTool, LoginOptions } from '../shared/auth-ipc'
 
 let store: ProjectStore | null = null
@@ -44,11 +49,12 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
     const unsubStore = s.onChange((e) =>
       broadcast(e.type === 'project' ? { type: 'project' } : e.type === 'assets' ? { type: 'assets', ep: e.ep } : { type: 'sequence', seq: e.sequence.seq }),
     )
-    host = new AgentHost(s, getWindow)
+    host = new AgentHost(s, getWindow, undefined, { list: (f) => publish.list(f), update: (id, st, o) => publish.update(id, st, o) })
     host.start().catch((err) => console.error('AgentHost start failed', err))
     watcher = new MdWatcher(s)
     const unsubWatch = watcher.onPending((list) => broadcast({ type: 'md-pending', count: list.length }))
     watcher.start()
+    publish.startPolling()
     unsubscribe = () => {
       unsubStore()
       unsubWatch()
@@ -204,6 +210,56 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
 
   ipcMain.handle('diag:tools', () => toolStatuses())
 
+  // 영상 콘티 가져오기
+  const video = new VideoService(() => store, getWindow)
+  ipcMain.handle('video:pick', (_e, kind) => video.pick(kind))
+  ipcMain.handle('video:suggest', () => video.suggest())
+  ipcMain.handle('video:import', (_e, o) => video.import(o))
+
+  // 레이아웃 — 템플릿·미리보기·출력
+  const layout = new LayoutService(() => store, getWindow)
+  layout.watchTemplates()
+  ipcMain.handle('layout:templates', () => layout.list())
+  ipcMain.handle('layout:render', (_e, seq: string | null, opts) => layout.render(seq, opts))
+  ipcMain.handle('layout:export', (_e, seq: string, kind: ExportKind, opts) => layout.export(seq, kind, opts))
+  ipcMain.handle('layout:history', (_e, seq: string) => layout.history(seq))
+  ipcMain.handle('layout:reveal', (_e, rel: string) => layout.reveal(rel))
+  ipcMain.handle('layout:setTemplate', (_e, id: string) => layout.setProjectTemplate(id))
+  ipcMain.handle('layout:duplicate', (_e, id: string, name?: string) => layout.duplicate(id, name))
+  ipcMain.handle('layout:openFolder', (_e, id: string) => layout.openFolder(id))
+  // 게시·피드백 (사내 뷰어 서버)
+  const publish = new PublishService(() => store, getWindow, layout)
+  ipcMain.handle('publish:settings', () => publish.settings())
+  ipcMain.handle('publish:saveSettings', (_e, url: string, token?: string) => publish.saveSettings(url, token))
+  ipcMain.handle('publish:test', () => publish.test())
+  ipcMain.handle('publish:publish', (_e, seq: string, o) => publish.publish(seq, o))
+  ipcMain.handle('publish:history', (_e, seq: string, refresh?: boolean) => (refresh ? publish.refreshHistory(seq).catch(() => publish.history(seq)) : publish.history(seq)))
+  ipcMain.handle('publish:revoke', (_e, id: string) => publish.revoke(id))
+  ipcMain.handle('feedback:list', (_e, f) => publish.list(f))
+  ipcMain.handle('feedback:pull', () => publish.pull())
+  ipcMain.handle('feedback:update', (_e, id: string, state, note?: string) => publish.update(id, state, { note }))
+  // 앱 — 첫 실행 안내·새 버전·진단 내보내기
+  const appInfo = new AppInfo(getWindow, () => store, () => publish.connection())
+  ipcMain.handle('app:version', () => app.getVersion())
+  ipcMain.handle('app:settings', () => appInfo.settings())
+  ipcMain.handle('app:setSettings', (_e, patch) => appInfo.setSettings(patch))
+  ipcMain.handle('app:checkUpdate', () => appInfo.checkUpdate())
+  ipcMain.handle('app:openDownload', (_e, url: string) => appInfo.openDownload(url))
+  ipcMain.handle('app:exportDiagnostics', () => appInfo.exportDiagnostics())
+  setTimeout(() => void appInfo.checkUpdate(), 8000) // 켜고 조금 뒤 한 번, 이후 6시간마다
+  setInterval(() => void appInfo.checkUpdate(), 6 * 3600_000).unref()
+  ipcMain.handle('feedback:applyWithAi', (_e, seq: string, ids?: string[]) => requireHost().feedbackTask(seq, ids))
+
+  ipcMain.handle('sequence:setAnnotations', (_e, seq: string, shotId: string, panelIndex: number, annotations) => {
+    const s = requireStore()
+    const shot = s.getSequence(seq)?.shots.find((x) => x.id === shotId)
+    if (!shot) throw new Error('샷이 없습니다')
+    const panels = shot.panels.length ? shot.panels.map((p) => ({ ...p })) : [{ id: randomUUID(), index: 0, annotations: [], versions: { conti: [], image: [] } }]
+    if (!panels[panelIndex]) throw new Error('패널이 없습니다')
+    panels[panelIndex] = { ...panels[panelIndex], annotations }
+    return s.updateShot(seq, shotId, { panels })
+  })
+
   // 계정 — 프로젝트가 없어도 쓴다 (시작 화면에서도 설정 가능)
   const auth = new AuthManager(getWindow)
   ipcMain.handle('auth:status', () => auth.status())
@@ -238,6 +294,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
   return {
     /** conti-file:// 프로토콜용 — 현재 프로젝트 루트 (없으면 null) */
     currentRoot: () => store?.root ?? null,
+    layout,
+    video,
+    publish,
+    appInfo,
+    /** 검증용 — 에이전트 호스트 (승인 요청·미리보기) */
+    agentHost: () => host,
+    /** 검증용 — 현재 스토어의 시퀀스 */
+    storeSnapshot: (seq: string) => store?.getSequence(seq),
     openProject: async (root: string) => attach(await ProjectStore.open(root), root),
     /** E2E 검증용: 로그인된 AI 로 한 턴 보내고 이벤트를 모아 돌려준다 */
     e2e: async (prompt: string, seq?: string) => {
@@ -296,6 +360,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
     },
     shutdown: async () => {
       await auth.stop().catch(() => {})
+      layout.stop()
+      publish.stop()
       await host?.stop().catch(() => {})
       await watcher?.stop().catch(() => {})
     },

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import Player from './components/Player'
 import SheetPreview from './components/SheetPreview'
+import LayoutPreview from './components/LayoutPreview'
 import Timeline from './components/Timeline'
 import ChatPanel from './components/ChatPanel'
 import ShotTable from './components/ShotTable'
@@ -12,14 +13,41 @@ import StartScreen from './views/StartScreen'
 import SourceView from './views/SourceView'
 import SettingsView from './views/SettingsView'
 import AssetsView from './views/AssetsView'
+import LayoutView from './views/LayoutView'
+import PublishView from './views/PublishView'
+import Onboarding from './views/Onboarding'
+import type { UpdateInfo } from '../../shared/app-ipc'
 import { ProjectProvider, useProject } from './state/project'
 import { demoScenes, type Scene } from './data/sampleScene'
 import { sequenceToScene } from './data/adapters'
 
 export default function App() {
+  const q = new URLSearchParams(window.location.search)
+  const [onboard, setOnboard] = useState(false)
+  const [update, setUpdate] = useState<UpdateInfo | null>(null)
+  useEffect(() => {
+    if (!window.conti?.app) return
+    // 검증 실행(test=1)은 안내를 띄우지 않는다 — onboarding=1 이면 강제로
+    void window.conti.app.settings().then((s) => setOnboard(q.get('onboarding') === '1' || (!s.onboarded && q.get('test') !== '1')))
+    return window.conti.onUpdate((u) => void window.conti.app.settings().then((s) => s.skipVersion !== u.version && setUpdate(u)))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <ProjectProvider>
+      {update && (
+        <div className="fixed top-2 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-accent/60 bg-panel px-4 py-2 text-[12.5px] shadow-xl">
+          <span>
+            새 버전 <b>NYX {update.version}</b> 이 나왔습니다 (지금 {update.current}){update.notes ? ` — ${update.notes}` : ''}
+          </span>
+          <button onClick={() => void window.conti.app.openDownload(update.url)} className="rounded-md bg-accent px-3 py-1 text-[12px] font-medium text-white">
+            내려받기
+          </button>
+          <button onClick={() => (void window.conti.app.setSettings({ skipVersion: update.version }), setUpdate(null))} className="text-[12px] text-muted hover:text-ink">
+            나중에
+          </button>
+        </div>
+      )}
       <Shell />
+      {onboard && <Onboarding onDone={() => setOnboard(false)} />}
     </ProjectProvider>
   )
 }
@@ -40,10 +68,85 @@ function Shell() {
   const scene = scenes.find((s) => s.seq === activeSeq) ?? scenes[0] ?? null
   const sequence = sequences.find((s) => s.seq === scene?.seq) ?? null
 
+  const [playing, setPlaying] = useState(false)
+
   useEffect(() => {
     setSelectedShot(null)
     setPlayhead(0)
+    setPlaying(false)
   }, [activeSeq])
+
+  // 자동 애니매틱 재생 — 실제 시간대로 플레이헤드를 민다 (끝나면 멈춤)
+  const duration = scene?.duration ?? 0
+  const last = useRef(0)
+  const videoDriven = !!scene?.video
+  useEffect(() => {
+    if (!playing || videoDriven) return // 영상 입력이면 플레이어의 <video> 가 플레이헤드를 민다
+    let raf = 0
+    last.current = performance.now()
+    const tick = (now: number) => {
+      const dt = (now - last.current) / 1000
+      last.current = now
+      setPlayhead((p) => {
+        const n = p + dt
+        if (n >= duration) {
+          setPlaying(false)
+          return duration
+        }
+        return n
+      })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing, duration, videoDriven])
+
+  const playPause = useCallback(() => {
+    setPlaying((v) => {
+      if (!v && playhead >= duration - 0.05) setPlayhead(0)
+      return !v
+    })
+  }, [playhead, duration])
+
+  // Space = 재생/멈춤 (입력란에서는 무시)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (e.code !== 'Space' || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return
+      e.preventDefault()
+      playPause()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [playPause])
+
+  // 캡처·검증용: ?shot=0020 이면 그 컷을 선택한 채로 연다
+  useEffect(() => {
+    const want = new URLSearchParams(window.location.search).get('shot')
+    if (want && scene?.shots.some((x) => x.no === want) && !selectedShot) {
+      setSelectedShot(want)
+      const sh = scene.shots.find((x) => x.no === want)!
+      setPlayhead(sh.tIn + 0.001)
+    }
+  }, [scene]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 컷을 고르면 플레이헤드도 그 컷으로 (재생 중이면 멈춤)
+  const selectShot = useCallback(
+    (no: string) => {
+      setSelectedShot(no)
+      setPlaying(false)
+      const sh = scene?.shots.find((x) => x.no === no)
+      if (sh) setPlayhead(sh.tIn + 0.001)
+    },
+    [scene],
+  )
+
+  const changeDuration = useCallback(
+    (shotId: string, sec: number) => {
+      if (sequence) void window.conti.api.sequence.updateShot(sequence.seq, shotId, { durationSec: sec })
+    },
+    [sequence],
+  )
 
   if (!root && !demoMode()) return <StartScreen />
 
@@ -52,18 +155,28 @@ function Shell() {
       <div className={`grid min-h-0 flex-1 gap-3 p-3 pt-0 ${sequence && selectedShot ? 'grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
         {nav === '샷 분해' && sequence ? (
           <div className="grid min-h-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
-            <ShotTable sequence={sequence} selectedShot={selectedShot} onSelect={setSelectedShot} />
-            <SheetPreview scene={scene!} selectedShot={selectedShot} onSelect={setSelectedShot} />
+            <ShotTable sequence={sequence} selectedShot={selectedShot} onSelect={selectShot} />
+            <LayoutPreview seq={sequence.seq} mode="single" selectedShot={selectedShot} onSelect={selectShot} />
           </div>
         ) : (
           <div className="grid min-h-0 grid-cols-2 gap-3">
-            <Player scene={scene!} playhead={playhead} onSeek={setPlayhead} />
-            <SheetPreview scene={scene!} selectedShot={selectedShot} onSelect={setSelectedShot} />
+            <Player scene={scene!} playhead={playhead} onSeek={setPlayhead} playing={playing} onPlayPause={playPause} onEnded={() => setPlaying(false)} sequence={sequence} selectedShot={selectedShot} />
+            {sequence ? <LayoutPreview seq={sequence.seq} mode="single" selectedShot={selectedShot} onSelect={selectShot} /> : <SheetPreview scene={scene!} selectedShot={selectedShot} onSelect={selectShot} />}
           </div>
         )}
         {sequence && selectedShot && <VersionsBar sequence={sequence} selectedShot={selectedShot} />}
-        <Timeline scene={scene!} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={setSelectedShot} />
+        <Timeline scene={scene!} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={sequence ? changeDuration : undefined} />
       </div>
+    ) : nav === '레이아웃' && sequence ? (
+      <LayoutView selectedShot={selectedShot} onSelect={selectShot} />
+    ) : nav === '게시' && sequence ? (
+      <PublishView
+        onGoShot={(no) => {
+          setNav('콘티')
+          setTimeout(() => selectShot(no), 0)
+        }}
+        onOpenSettings={() => setShowDiag(true)}
+      />
     ) : (
       <ComingSoon nav={nav} />
     )

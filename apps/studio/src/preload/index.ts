@@ -2,6 +2,10 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { Api, StoreChange } from '../shared/ipc'
 import type { AgentApi, AgentUiEvent } from '../shared/agent-ipc'
 import type { AuthApi, AuthEvent } from '../shared/auth-ipc'
+import type { LayoutApi } from '../shared/layout-ipc'
+import type { VideoApi, VideoProgress } from '../shared/video-ipc'
+import type { PublishApi, PublishProgress } from '../shared/publish-ipc'
+import type { AppApi, UpdateInfo } from '../shared/app-ipc'
 
 const invoke = (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args)
 
@@ -18,6 +22,7 @@ const api: Api = {
     get: (seq) => invoke('sequence:get', seq),
     updateShot: (seq, shotId, patch) => invoke('sequence:updateShot', seq, shotId, patch),
     setCurrentVersion: (seq, shotId, versionId) => invoke('sequence:setCurrentVersion', seq, shotId, versionId),
+    setAnnotations: (seq, shotId, panelIndex, annotations) => invoke('sequence:setAnnotations', seq, shotId, panelIndex, annotations),
   },
   screenplay: {
     importDialog: () => invoke('screenplay:importDialog'),
@@ -53,6 +58,45 @@ const agent: AgentApi = {
   runTask: (task, seq) => invoke('agent:runTask', task, seq),
 }
 
+const layout: LayoutApi = {
+  templates: () => invoke('layout:templates'),
+  render: (seq, opts) => invoke('layout:render', seq, opts),
+  export: (seq, kind, opts) => invoke('layout:export', seq, kind, opts),
+  history: (seq) => invoke('layout:history', seq),
+  reveal: (rel) => invoke('layout:reveal', rel),
+  setTemplate: (id) => invoke('layout:setTemplate', id),
+  duplicate: (id, name) => invoke('layout:duplicate', id, name),
+  openFolder: (id) => invoke('layout:openFolder', id),
+}
+
+const video: VideoApi = {
+  pick: (kind) => invoke('video:pick', kind),
+  suggest: () => invoke('video:suggest'),
+  import: (o) => invoke('video:import', o),
+}
+
+const publish: PublishApi = {
+  settings: () => invoke('publish:settings'),
+  saveSettings: (url, token) => invoke('publish:saveSettings', url, token),
+  test: () => invoke('publish:test'),
+  publish: (seq, o) => invoke('publish:publish', seq, o),
+  history: (seq, refresh) => invoke('publish:history', seq, refresh),
+  revoke: (id) => invoke('publish:revoke', id),
+  feedback: (f) => invoke('feedback:list', f),
+  pull: () => invoke('feedback:pull'),
+  updateFeedback: (id, state, note) => invoke('feedback:update', id, state, note),
+  applyWithAi: (seq, ids) => invoke('feedback:applyWithAi', seq, ids),
+}
+
+const appApi: AppApi = {
+  version: () => invoke('app:version'),
+  settings: () => invoke('app:settings'),
+  setSettings: (patch) => invoke('app:setSettings', patch),
+  checkUpdate: () => invoke('app:checkUpdate'),
+  openDownload: (url) => invoke('app:openDownload', url),
+  exportDiagnostics: () => invoke('app:exportDiagnostics'),
+}
+
 const auth: AuthApi = {
   status: () => invoke('auth:status'),
   login: (tool, opts) => invoke('auth:login', tool, opts),
@@ -68,6 +112,35 @@ contextBridge.exposeInMainWorld('conti', {
   api,
   agent,
   auth,
+  layout,
+  video,
+  publish,
+  app: appApi,
+  onUpdate(fn: (u: UpdateInfo) => void) {
+    const handler = (_e: unknown, u: UpdateInfo) => fn(u)
+    ipcRenderer.on('app:update', handler)
+    return () => ipcRenderer.removeListener('app:update', handler)
+  },
+  onPublishProgress(fn: (p: PublishProgress) => void) {
+    const handler = (_e: unknown, p: PublishProgress) => fn(p)
+    ipcRenderer.on('publish:progress', handler)
+    return () => ipcRenderer.removeListener('publish:progress', handler)
+  },
+  onFeedbackChange(fn: (e: { added: number; open?: number }) => void) {
+    const handler = (_e: unknown, p: { added: number; open?: number }) => fn(p)
+    ipcRenderer.on('feedback:changed', handler)
+    return () => ipcRenderer.removeListener('feedback:changed', handler)
+  },
+  onVideoProgress(fn: (p: VideoProgress) => void) {
+    const handler = (_e: unknown, p: VideoProgress) => fn(p)
+    ipcRenderer.on('video:progress', handler)
+    return () => ipcRenderer.removeListener('video:progress', handler)
+  },
+  onLayoutChange(fn: (e: { file: string }) => void) {
+    const handler = (_e: unknown, ev: { file: string }) => fn(ev)
+    ipcRenderer.on('layout:changed', handler)
+    return () => ipcRenderer.removeListener('layout:changed', handler)
+  },
   onAuthEvent(fn: (e: AuthEvent) => void) {
     const handler = (_e: unknown, ev: AuthEvent) => fn(ev)
     ipcRenderer.on('auth:event', handler)

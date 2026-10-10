@@ -12,6 +12,26 @@ export interface ContiMcpHooks {
   onSpendRequest?(req: SpendRequest): void
   /** 승인된 요청의 작업 진행 (JobService) — jobs_status / jobs_wait 가 보여준다. */
   jobsForRequest?(requestId: string): JobView[]
+  /** 뷰어 피드백 (PublishService) — 게시 서버가 설정돼 있을 때만 */
+  feedbackList?(f: { seq?: string; state?: 'open' | 'applied' | 'declined' | 'all' }): Promise<FeedbackView[]>
+  feedbackUpdate?(commentId: string, state: 'open' | 'applied' | 'declined', o: { note?: string; versionId?: string }): Promise<FeedbackView>
+}
+
+export interface FeedbackView {
+  commentId: string
+  seq: string
+  label: string
+  kind: string
+  shotNo?: string
+  panelIndex?: number
+  region?: { page: number; x: number; y: number; w: number; h: number }
+  tMs?: number
+  text: string
+  author: string
+  verdict?: 'approve' | 'changes'
+  state: 'open' | 'applied' | 'declined'
+  resolvedIn?: string
+  note?: string
 }
 
 /** 작업 요약 — AI 에게 보여줄 만큼만 (프롬프트 전문은 뺀다). */

@@ -1,0 +1,9 @@
+{
+  "id": "placeholder-a4-6up",
+  "name": "기본 A4 가로 6컷",
+  "version": "1",
+  "description": "임시 기본 템플릿 — A4 가로, 3×2 그리드. 폼 디자인을 확정하면 새 템플릿 폴더로 교체한다.",
+  "paper": { "size": "A4", "orientation": "landscape" },
+  "panelsPerPage": 6,
+  "panelAspect": "16 / 9"
+}

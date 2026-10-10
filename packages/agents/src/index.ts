@@ -19,3 +19,4 @@ export async function pickAvailable(preferred?: AgentKind): Promise<AgentKind | 
   for (const [k, d] of results) if (d.installed && d.auth === 'ok') return k
   return null
 }
+export { runStructured, parseStructuredOutput, buildStructuredClaudeArgs, buildStructuredCodexArgs, StructuredError, type StructuredRequest, type StructuredResult, type StructuredUsage } from './structured'

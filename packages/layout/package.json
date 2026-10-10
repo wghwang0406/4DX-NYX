@@ -1,0 +1,24 @@
+{
+  "name": "@conti/layout",
+  "private": true,
+  "version": "0.0.1",
+  "description": "레이아웃 템플릿 — 템플릿 폴더 로더, Handlebars 렌더, LayoutDataBuilder",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@conti/core": "workspace:*",
+    "@conti/domain": "workspace:*",
+    "handlebars": "^4.7.10",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

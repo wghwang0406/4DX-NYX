@@ -1,6 +1,9 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { ToolStatus } from '../shared/ipc'
+import { app } from 'electron'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 
 const run = promisify(execFile)
 
@@ -61,10 +64,13 @@ export async function toolStatuses(): Promise<ToolStatus[]> {
       return { name: 'ffmpeg', installed: true, version: v.out.split('\n')[0].replace(/ Copyright.*/, ''), path }
     })(),
     (async (): Promise<ToolStatus> => {
-      const path = await where('uv')
-      if (!path) return { name: 'uv', installed: false, detail: '영상 분석에 필요. 앱이 나중에 자동 설치한다.' }
-      const v = await probe('uv', ['--version'])
-      return { name: 'uv', installed: true, version: v.out, path }
+      // 앱 번들(패키징) → 앱 데이터 tools/ → PATH 순 (영상 가져오기와 같은 순서)
+      const candidates = [app.isPackaged ? join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'uv.exe' : 'uv') : '', join(app.getPath('userData'), 'tools', process.platform === 'win32' ? 'uv.exe' : 'uv')].filter(Boolean)
+      const path = candidates.find((p) => existsSync(p)) ?? (await where('uv'))
+      if (!path) return { name: 'uv', installed: false, detail: '영상을 처음 가져올 때 앱이 앱 데이터 폴더에 자동으로 준비합니다' }
+      const v = await probe(path, ['--version'])
+      const env = existsSync(join(app.getPath('userData'), 'py-env', 'pyvenv.cfg'))
+      return { name: 'uv', installed: true, version: `${v.out}${env ? ' · 분석 환경 준비됨' : ' · 분석 환경은 첫 영상 때 준비'}`, path }
     })(),
   ])
   return [claude, codex, higgs, ffmpeg, uv]

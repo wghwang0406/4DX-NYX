@@ -1,0 +1,32 @@
+/* 기본 A4 가로 6컷 — 화면·PDF 공통. 단위는 mm. */
+.page { padding: 9mm 10mm 7mm; background: #fff; color: #161616; display: flex; flex-direction: column; }
+.hd { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 0.5mm solid #161616; padding-bottom: 2mm; }
+.hd-l { display: flex; align-items: baseline; gap: 3mm; }
+.seq { font-size: 6.2mm; font-weight: 700; letter-spacing: -0.1mm; }
+.place { font-size: 5mm; font-weight: 600; }
+.time { font-size: 3.4mm; color: #555; border: 0.25mm solid #999; border-radius: 1mm; padding: 0.2mm 1.5mm; }
+.hd-r { font-size: 3mm; color: #555; display: flex; gap: 1.2mm; }
+.dot { color: #aaa; }
+
+.grid { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 4mm 4mm; margin-top: 4mm; min-height: 0; }
+.cell { border: 0.3mm solid #161616; display: flex; flex-direction: column; min-height: 0; position: relative; }
+.cell.empty { border: 0.3mm dashed #c8c8c8; }
+.cell.stale { border-color: #d97706; }
+.cell-top { display: flex; justify-content: space-between; align-items: center; padding: 1.2mm 1.8mm; border-bottom: 0.25mm solid #161616; gap: 2mm; }
+.no { font-weight: 700; font-size: 3.6mm; font-variant-numeric: tabular-nums; }
+.chips { display: flex; gap: 0.8mm; flex-wrap: nowrap; overflow: hidden; }
+.chip { font-size: 2.4mm; border: 0.2mm solid #888; border-radius: 0.8mm; padding: 0.1mm 1mm; color: #333; white-space: nowrap; }
+.frame { position: relative; aspect-ratio: 16 / 9; background: #f1f0ec; border-bottom: 0.25mm solid #161616; overflow: hidden; }
+.frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #fff; }
+.noimg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 3mm; color: #9a9a9a;
+  background: repeating-linear-gradient(45deg, #f4f3ef 0 2mm, #ebe9e3 2mm 4mm); }
+.ver { position: absolute; right: 1mm; bottom: 1mm; font-size: 2mm; color: #fff; background: rgba(0,0,0,.55); border-radius: 0.6mm; padding: 0.1mm 0.8mm; }
+.text { flex: 1; padding: 1.4mm 1.8mm; font-size: 2.9mm; line-height: 1.38; overflow: hidden; min-height: 0; }
+.text p { margin: 0 0 0.8mm; }
+.dlg b { font-weight: 700; margin-right: 0.6mm; }
+.dlg i { color: #666; font-style: normal; }
+.act.small { color: #555; font-size: 2.5mm; }
+.tc { position: absolute; left: 1.8mm; bottom: 0.8mm; font-size: 2mm; color: #888; font-variant-numeric: tabular-nums; }
+
+.ft { display: flex; justify-content: space-between; font-size: 2.6mm; color: #666; margin-top: 2.5mm; }
+.status { font-weight: 600; color: #161616; }
