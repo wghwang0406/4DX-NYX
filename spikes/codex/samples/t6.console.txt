@@ -1,0 +1,15 @@
+    0.1s thread.started {"thread_id":"01a12112-cf5e-7b72-936a-48cd5a447a33"}
+    0.2s turn.started {}
+    5.5s item.completed [agent_message#item_0] text="I’ll run `sleep 30`, then reply as requested."
+    5.9s item.started [command_execution#item_1] cmd="/bin/zsh -lc 'sleep 30'" status=in_progress exit=null
+  >> event-triggered kill of process group -82971 (+2000ms)
+== t6-interrupt: exit=0 signal=null ms=7889 pid=82971 thread=01a12112-cf5e-7b72-936a-48cd5a447a33
+   usage=[]
+   last_message="I’ll run `sleep 30`, then reply as requested."
+after kill: `codex exec` procs:
+54300 /Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex exec-server --remote https://codex-cloud-environments.chatgpt.com/api --environment-id ccarenv_b64_Y2NhcmVudl82YWM0OTQyZDBmNWM4MTkxOWUwODM0YzA5YzI5MWMwYQ
+82969 node /opt/homebrew/bin/codex exec resume 01a12111-8c59-7b01-b67a-a7e3c9f2cb8d --all --json --skip-git-repo-check -
+82975 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex exec resume 01a12111-8c59-7b01-b67a-a7e3c9f2cb8d --all --json --skip-git-repo-check -
+after kill: our pid alive? no
+after kill: sleep 30 procs:
+83085 sleep 30

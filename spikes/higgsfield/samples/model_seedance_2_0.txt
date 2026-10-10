@@ -1,0 +1,24 @@
+Seedance 2.0 (seedance_2_0, video)
+
+PARAM             TYPE                                       DEFAULT   REQUIRED  CLI
+aspect_ratio      auto,16:9,9:16,4:3,3:4,1:1,21:9            16:9                
+audio_references  array                                      —                   use repeated --audio-references (or --audio)
+bitrate_mode      standard,high                              standard            
+duration          integer                                    5                   
+end_image         object|null                                —                   use --end-image <path-or-id>
+generate_audio    boolean                                    true                
+genre             auto,action,horror,comedy,noir,drama,epic  auto                
+image_references  array                                      —                   use repeated --image-references (or --image)
+mode              std,fast                                   std                 
+prompt            string                                     —         yes       
+resolution        480p,720p,1080p,4k                         720p                
+start_image       object|null                                —                   use --start-image <path-or-id>
+video_references  array                                      —                   use repeated --video-references (or --video)
+
+CONSTRAINTS
+- at most 9 image references are allowed (counting start_image and end_image)
+- at most 3 video_references are allowed
+- at most 3 audio_references are allowed
+- at most 12 reference files are allowed in total across images, videos, and audios (including start_image and end_image)
+- audio_references require at least one image, video, start_image, or end_image
+- mode 'fast' supports only 480p/720p; use mode 'std' for 1080p/4k

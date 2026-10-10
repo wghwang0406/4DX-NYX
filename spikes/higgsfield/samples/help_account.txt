@@ -1,0 +1,52 @@
+View the signed-in account's balance, subscription plan, and recent credit transactions.
+
+Usage:
+  higgsfield account [command]
+
+Aliases:
+  account, acc
+
+Examples:
+  higgsfield account status
+  higgsfield account transactions --size 50
+
+Available Commands:
+  status       Show account email, plan, and available credits
+  transactions List recent credit transactions
+
+Flags:
+  -h, --help   help for account
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output
+
+Use "higgsfield account [command] --help" for more information about a command.
+Show account email, plan, and available credits
+
+Usage:
+  higgsfield account status [flags]
+
+Flags:
+  -h, --help   help for status
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output
+List recent credit transactions
+
+Usage:
+  higgsfield account transactions [flags]
+
+Examples:
+  higgsfield account transactions
+  higgsfield account transactions --size 100 --cursor <cursor>
+
+Flags:
+      --cursor string   pagination cursor
+  -h, --help            help for transactions
+      --size int        page size (max 100) (default 20)
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

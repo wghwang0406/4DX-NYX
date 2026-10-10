@@ -1,0 +1,20 @@
+# 의존성·빌드
+node_modules/
+**/node_modules/
+out/
+dist/
+*.tsbuildinfo
+.vite/
+
+# OS·에디터
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# 로컬 산출물
+*.log
+.env
+.env.*
+/tmp/
+.claude/settings.local.json

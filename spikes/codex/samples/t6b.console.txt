@@ -1,0 +1,23 @@
+    0.8s thread.started {"thread_id":"01a12113-dbd8-70c0-a3ff-76035d8129eb"}
+    0.9s turn.started {}
+    5.0s item.completed [agent_message#item_0] text="I’ll run `sleep 30` now."
+    6.1s item.started [command_execution#item_1] cmd="/bin/zsh -lc 'sleep 30'" status=in_progress exit=null
+tree while sleep runs:
+83157 83154 83157 node /opt/homebrew/bin/codex exec --json --skip-git-repo-check --ignore-user-config -s read-only -C /Users/wongyeong/Desktop/build/spikes/codex/ -
+83160 83157 83157 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex exec --json --skip-git-repo-check --ignore-user-config -s read-only -C /Users/wongyeong/Desktop/build/spikes/codex/ -
+83162 83155 83162 node /opt/homebrew/bin/codex exec --json --skip-git-repo-check --ignore-user-config -s read-only -C /Users/wongyeong/Desktop/build/spikes/codex -c mcp_servers.conti.url="http://127.0.0.1:47123/mcp" -c mcp_servers.conti.bearer_token_env_var="CONTI_MCP_TOKEN" -c mcp_servers.conti.startup_timeout_sec=20 -c mcp_servers.conti.default_tools_approval_mode="approve" -
+83163 83162 83162 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex exec --json --skip-git-repo-check --ignore-user-config -s read-only -C /Users/wongyeong/Desktop/build/spikes/codex -c mcp_servers.conti.url="http://127.0.0.1:47123/mcp" -c mcp_servers.conti.bearer_token_env_var="CONTI_MCP_TOKEN" -c mcp_servers.conti.startup_timeout_sec=20 -c mcp_servers.conti.default_tools_approval_mode="approve" -
+83228 83160 83228 sleep 30
+native codex pid 83157 descendants [ 83160, 83227, 83228 ]
+>> sending SIGINT to native codex 83157
+  [stderr] 2026-10-09T14:31:59.145505Z ERROR codex_core::tools::router: error=exec_command failed: UnknownProcessId { process_id: 70298 }
+== t6b-interrupt: exit=1 signal=null ms=7440 pid=83157 thread=01a12113-dbd8-70c0-a3ff-76035d8129eb
+   usage=[]
+   last_message="I’ll run `sleep 30` now."
+exit: 1 null ms 7440
+  >> event-triggered kill of process group -83157 (+1500ms)
+  kill err kill ESRCH
+tree 1.5s after exit:
+83162 83155 83162 node /opt/homebrew/bin/codex exec --json --skip-git-repo-check --ignore-user-config -s read-only -C /Users/wongyeong/Desktop/build/spikes/codex -c mcp_servers.conti.url="http://127.0.0.1:47123/mcp" -c mcp_servers.conti.bearer_token_env_var="CONTI_MCP_TOKEN" -c mcp_servers.conti.startup_timeout_sec=20 -c mcp_servers.conti.default_tools_approval_mode="approve" -
+83163 83162 83162 /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex exec --json --skip-git-repo-check --ignore-user-config -s read-only -C /Users/wongyeong/Desktop/build/spikes/codex -c mcp_servers.conti.url="http://127.0.0.1:47123/mcp" -c mcp_servers.conti.bearer_token_env_var="CONTI_MCP_TOKEN" -c mcp_servers.conti.startup_timeout_sec=20 -c mcp_servers.conti.default_tools_approval_mode="approve" -
+captured descendants still alive: []

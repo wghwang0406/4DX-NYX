@@ -1,0 +1,15 @@
+Show one generation job
+
+Usage:
+  higgsfield generate get <id> [flags]
+
+Examples:
+  higgsfield generate get <job_id>
+  higgsfield generate get <job_id> --json
+
+Flags:
+  -h, --help   help for get
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

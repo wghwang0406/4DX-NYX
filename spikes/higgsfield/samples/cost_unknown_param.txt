@@ -1,0 +1,2 @@
+Error: Unknown params: bogus
+Hint: Run: hf model get gpt_image_2_5

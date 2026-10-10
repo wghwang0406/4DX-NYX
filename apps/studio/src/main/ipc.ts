@@ -1,0 +1,303 @@
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { join, basename } from 'node:path'
+import { readFile, copyFile, mkdir } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { ProjectStore, MdWatcher, readText, writeAtomic, sha256 } from '@conti/core'
+import { splitScenes, textToLines, seqIdFromSceneNumber, extractPdfLines, type SourceLine } from '@conti/screenplay'
+import { safeName } from '@conti/domain'
+import type { ImportPick, ImportPreview, StoreChange } from '../shared/ipc'
+import { toolStatuses } from './diag'
+import { AgentHost } from './agent-host'
+import { AuthManager } from './auth'
+import type { AuthTool, LoginOptions } from '../shared/auth-ipc'
+
+let store: ProjectStore | null = null
+let watcher: MdWatcher | null = null
+let host: AgentHost | null = null
+let unsubscribe: (() => void) | null = null
+const pendingImports = new Map<string, { fileName: string; lines: SourceLine[]; sourceRel: string }>()
+
+const recentPath = () => join(app.getPath('userData'), 'recent.json')
+
+async function loadRecent(): Promise<Array<{ root: string; title: string; code: string; openedAt: number }>> {
+  try {
+    return JSON.parse(await readFile(recentPath(), 'utf8'))
+  } catch {
+    return []
+  }
+}
+
+async function pushRecent(root: string, title: string, code: string) {
+  const list = (await loadRecent()).filter((r) => r.root !== root)
+  list.unshift({ root, title, code, openedAt: Date.now() })
+  await writeAtomic(recentPath(), JSON.stringify(list.slice(0, 10), null, 2))
+}
+
+export function registerIpc(getWindow: () => BrowserWindow | null) {
+  const broadcast = (change: StoreChange) => getWindow()?.webContents.send('store:change', change)
+
+  async function attach(s: ProjectStore, root: string) {
+    unsubscribe?.()
+    await watcher?.stop()
+    await host?.stop().catch(() => {})
+    store = s
+    const unsubStore = s.onChange((e) =>
+      broadcast(e.type === 'project' ? { type: 'project' } : e.type === 'assets' ? { type: 'assets', ep: e.ep } : { type: 'sequence', seq: e.sequence.seq }),
+    )
+    host = new AgentHost(s, getWindow)
+    host.start().catch((err) => console.error('AgentHost start failed', err))
+    watcher = new MdWatcher(s)
+    const unsubWatch = watcher.onPending((list) => broadcast({ type: 'md-pending', count: list.length }))
+    watcher.start()
+    unsubscribe = () => {
+      unsubStore()
+      unsubWatch()
+    }
+    const p = s.getProject()
+    await pushRecent(root, p.title, p.code)
+    return { root, project: p }
+  }
+
+  const requireStore = () => {
+    if (!store) throw new Error('열린 프로젝트가 없습니다')
+    return store
+  }
+
+  ipcMain.handle('project:openDialog', async () => {
+    const win = getWindow()
+    const r = await dialog.showOpenDialog(win!, {
+      title: '프로젝트 폴더 열기 (config.md 가 있는 폴더)',
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    if (r.canceled || !r.filePaths[0]) return null
+    const picked = r.filePaths[0]
+    const found = await ProjectStore.findRoot(picked)
+    if (!found) {
+      const title = basename(picked)
+      const code = safeName(title).toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 8)
+      const s = await ProjectStore.create(picked, { code: /^[A-Z]/.test(code) ? code : `P${code || 'ROJ'}`, title })
+      return attach(s, picked)
+    }
+    return attach(await ProjectStore.open(found), found)
+  })
+
+  ipcMain.handle('project:createDialog', async (_e, init: { code: string; title: string }) => {
+    const win = getWindow()
+    const r = await dialog.showOpenDialog(win!, {
+      title: '새 프로젝트를 만들 상위 폴더 선택',
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    if (r.canceled || !r.filePaths[0]) return null
+    const root = join(r.filePaths[0], safeName(init.title))
+    await mkdir(root, { recursive: true })
+    const s = await ProjectStore.create(root, { code: init.code, title: init.title })
+    return attach(s, root)
+  })
+
+  ipcMain.handle('project:openPath', async (_e, root: string) => attach(await ProjectStore.open(root), root))
+  ipcMain.handle('project:current', async () => (store ? { root: store.root, project: store.getProject() } : null))
+  ipcMain.handle('project:recent', () => loadRecent())
+
+  ipcMain.handle('sequence:list', () => requireStore().listSequences())
+  ipcMain.handle('sequence:get', (_e, seq: string) => requireStore().getSequence(seq) ?? null)
+  ipcMain.handle('sequence:updateShot', (_e, seq: string, shotId: string, patch) => requireStore().updateShot(seq, shotId, patch))
+  ipcMain.handle('sequence:setCurrentVersion', (_e, seq: string, shotId: string, versionId: string) => {
+    const s = requireStore()
+    const shot = s.getSequence(seq)?.shots.find((x) => x.id === shotId)
+    if (!shot) throw new Error('샷이 없습니다')
+    if (!shot.panels.some((p) => p.versions.conti.some((v) => v.id === versionId))) throw new Error('버전이 없습니다')
+    return s.updateShot(seq, shotId, { stages: { ...shot.stages, conti: { ...shot.stages.conti, currentVersionId: versionId, status: 'review', updatedAt: Date.now() } } })
+  })
+
+  ipcMain.handle('screenplay:importDialog', async (): Promise<ImportPreview | null> => {
+    const s = requireStore()
+    const r = await dialog.showOpenDialog(getWindow()!, {
+      title: '시나리오 가져오기',
+      properties: ['openFile'],
+      filters: [{ name: '시나리오', extensions: ['pdf', 'txt', 'md', 'fountain'] }],
+    })
+    if (r.canceled || !r.filePaths[0]) return null
+    return importFile(s, r.filePaths[0])
+  })
+
+  async function importFile(s: ProjectStore, file: string): Promise<ImportPreview> {
+    const fileName = basename(file)
+    let lines: SourceLine[]
+    let hashSource: string | Buffer
+    if (file.toLowerCase().endsWith('.pdf')) {
+      const buf = await readFile(file)
+      lines = await extractPdfLines(new Uint8Array(buf))
+      hashSource = buf
+      const hangul = lines.reduce((n, l) => n + (l.text.match(/[가-힣]/g)?.length ?? 0), 0)
+      if (lines.length > 20 && hangul < lines.length * 2) {
+        throw new Error('PDF에서 한글 텍스트를 거의 못 읽었습니다 (스캔본이거나 폰트 매핑이 없음). 텍스트로 저장해 넣어 주세요.')
+      }
+    } else {
+      const text = await readText(file)
+      lines = textToLines(text)
+      hashSource = text
+    }
+    const scenes = splitScenes(lines)
+    const sourceId = randomUUID()
+    const rel = `sources/${sha256(hashSource).slice(0, 8)}_${safeName(fileName)}`
+    await mkdir(join(s.root, 'sources'), { recursive: true })
+    await copyFile(file, join(s.root, rel))
+    pendingImports.set(sourceId, { fileName, lines, sourceRel: rel })
+    const existing = new Set(s.listSequences().map((q) => q.seq))
+    return {
+      sourceId,
+      fileName,
+      lineCount: lines.length,
+      scenes: scenes.map((sc) => {
+        let seq = seqIdFromSceneNumber(sc.number, sc.index)
+        if (existing.has(seq)) seq = `${seq}_new`
+        return {
+          index: sc.index,
+          number: sc.number,
+          headingRaw: sc.headingRaw,
+          title: sc.title,
+          timeOfDay: sc.timeOfDay,
+          lineStart: sc.lineStart,
+          lineEnd: sc.lineEnd,
+          lineCount: sc.lines.filter((l) => l.text.trim()).length,
+          preview: sc.lines.map((l) => l.text.trim()).filter(Boolean).slice(0, 2).join(' / ').slice(0, 120),
+          suggestedSeq: seq,
+        }
+      }),
+    }
+  }
+
+  ipcMain.handle('screenplay:commit', async (_e, sourceId: string, picks: ImportPick[]) => {
+    const s = requireStore()
+    const imp = pendingImports.get(sourceId)
+    if (!imp) throw new Error('가져오기 세션이 만료됐습니다. 다시 가져와 주세요.')
+    const scenes = splitScenes(imp.lines)
+    const out = []
+    for (const pick of picks) {
+      const sc = scenes[pick.index]
+      if (!sc) continue
+      // 씬 경계 조정: 뒤따르는 씬을 합치면 그 헤딩 줄도 본문으로 들어간다
+      const merged = [...sc.lines]
+      let lineEnd = sc.lineEnd
+      for (const mi of pick.mergeFollowing ?? []) {
+        const m = scenes[mi]
+        if (!m) continue
+        merged.push({ n: m.lineStart, text: m.headingRaw }, ...m.lines)
+        lineEnd = Math.max(lineEnd, m.lineEnd)
+      }
+      const sceneText = merged.map((l) => l.text).join('\n')
+      out.push(
+        await s.upsertSequence({
+          seq: pick.seq,
+          ep: pick.ep,
+          headingKo: `${sc.title}${sc.timeOfDay ? ` - ${sc.timeOfDay === 'D' ? '낮' : '밤'}` : ''}`,
+          source: { sourceId: imp.sourceRel, lineStart: sc.lineStart, lineEnd, textHash: sha256(sceneText), kind: 'screenplay' },
+        }),
+      )
+    }
+    return out
+  })
+
+  ipcMain.handle('md:pending', () => watcher?.list().map(({ rel, kind, seq, summary }) => ({ rel, kind, seq, summary })) ?? [])
+  ipcMain.handle('md:accept', (_e, rel: string) => watcher?.accept(rel))
+  ipcMain.handle('md:discard', (_e, rel: string) => watcher?.discard(rel))
+
+  ipcMain.handle('diag:tools', () => toolStatuses())
+
+  // 계정 — 프로젝트가 없어도 쓴다 (시작 화면에서도 설정 가능)
+  const auth = new AuthManager(getWindow)
+  ipcMain.handle('auth:status', () => auth.status())
+  ipcMain.handle('auth:login', (_e, tool: AuthTool, opts?: LoginOptions) => auth.login(tool, opts))
+  ipcMain.handle('auth:pasteCode', (_e, tool: AuthTool, code: string) => auth.pasteCode(tool, code))
+  ipcMain.handle('auth:cancel', (_e, tool: AuthTool) => auth.cancel(tool))
+  ipcMain.handle('auth:logout', (_e, tool: AuthTool) => auth.logout(tool))
+  ipcMain.handle('auth:openUrl', (_e, url: string) => auth.openUrl(url))
+
+  // Api.assets.list 는 Asset[] 을 약속한다 — EpisodeAssets 통째로 보내면 렌더러의 .filter 가 터져 항상 "없음"이 됐다
+  ipcMain.handle('assets:list', async (_e, ep: string) => (await requireStore().listAssets(ep)).assets)
+
+  const requireHost = () => {
+    if (!host) throw new Error('열린 프로젝트가 없습니다')
+    return host
+  }
+  ipcMain.handle('agent:availability', () => requireHost().availability())
+  ipcMain.handle('agent:threads', () => requireHost().listThreads())
+  ipcMain.handle('agent:history', (_e, id: string) => requireHost().history(id))
+  ipcMain.handle('agent:open', (_e, opts) => requireHost().open(opts))
+  ipcMain.handle('agent:send', (_e, id: string, text: string, ctx) => requireHost().send(id, text, ctx))
+  ipcMain.handle('agent:interrupt', (_e, id: string) => requireHost().interrupt(id))
+  ipcMain.handle('agent:close', (_e, id: string) => requireHost().close(id))
+  ipcMain.handle('agent:spendList', () => requireHost().spendList())
+  ipcMain.handle('agent:spendDecide', (_e, id: string, d, n) => requireHost().spendDecide(id, d, n))
+  ipcMain.handle('agent:spendPreview', (_e, id: string, n) => requireHost().spendPreview(id, n))
+  ipcMain.handle('agent:requestSpend', (_e, kind, args) => requireHost().requestSpend(kind, args))
+  ipcMain.handle('agent:jobs', (_e, requestId) => requireHost().jobs(requestId))
+  ipcMain.handle('agent:jobResubmit', (_e, id: string) => requireHost().jobResubmit(id))
+  ipcMain.handle('agent:runTask', (_e, task, seq) => requireHost().runTask(task, seq))
+
+  return {
+    /** conti-file:// 프로토콜용 — 현재 프로젝트 루트 (없으면 null) */
+    currentRoot: () => store?.root ?? null,
+    openProject: async (root: string) => attach(await ProjectStore.open(root), root),
+    /** E2E 검증용: 로그인된 AI 로 한 턴 보내고 이벤트를 모아 돌려준다 */
+    e2e: async (prompt: string, seq?: string) => {
+      const h = requireHost()
+      const kind = (await h.availability()).find((a) => a.installed && a.auth === 'ok')?.kind
+      if (!kind) throw new Error('로그인된 AI 없음')
+      const info = await h.open({ agent: kind, seq })
+      const events: unknown[] = []
+      const done = new Promise<void>((resolve) => {
+        const win = getWindow()
+        const orig = win?.webContents.send.bind(win.webContents)
+        if (!win || !orig) return resolve()
+        win.webContents.send = ((channel: string, payload: unknown) => {
+          if (channel === 'agent:event') {
+            events.push(payload)
+            const e = payload as { t: string; threadId?: string }
+            if (e.threadId === info.id && (e.t === 'turn_end' || e.t === 'error')) resolve()
+          }
+          return orig(channel, payload)
+        }) as typeof win.webContents.send
+      })
+      await h.send(info.id, prompt, { seq })
+      await Promise.race([done, new Promise((r) => setTimeout(r, 180000))])
+      return { agent: kind, threadId: info.id, events }
+    },
+    /** E2E 검증용(가짜 CLI): 시퀀스 앞 n 샷의 콘티를 요청→승인→완료까지 돌리고 결과를 돌려준다 (AI 없이) */
+    e2eGenerate: async (seq: string, n = 2, decision: 'approved' | 'pilot' = 'approved', waitMs = 60_000) => {
+      const h = requireHost()
+      const s = requireStore().getSequence(seq)
+      if (!s) throw new Error(`시퀀스 없음: ${seq}`)
+      const terminal = (j: { status: string }) => ['done', 'failed', 'cancelled', 'unknown'].includes(j.status)
+      const waitAll = async (requestId?: string) => {
+        const deadline = Date.now() + waitMs
+        let jobs = h.jobs(requestId)
+        while (Date.now() < deadline && (!jobs.length || jobs.some((j) => !terminal(j)))) {
+          await new Promise((r) => setTimeout(r, 300))
+          jobs = h.jobs(requestId)
+        }
+        return jobs
+      }
+      const dump = () => requireStore().getSequence(seq)!.shots.filter((x) => !x.deleted).slice(0, Math.max(n, 3)).map((x) => ({ no: x.no, stages: x.stages.conti, versions: x.panels.flatMap((p) => p.versions.conti) }))
+      // n=0: 요청을 만들지 않고 복구된 작업이 끝나기만 기다린다 (크래시 복구 검증)
+      if (n === 0) return { recovered: true, jobs: await waitAll(), shots: dump() }
+      const shots = s.shots.filter((x) => !x.deleted).slice(0, n).map((x) => x.no)
+      const req =
+        process.env.CONTI_E2E_KIND === 'assets'
+          ? await h.requestSpend('assets_generate', { ep: s.ep, ids: (await requireStore().listAssets(s.ep)).assets.slice(0, n).map((a) => a.id) })
+          : await h.requestSpend('conti_generate', { seq, shots, style: 'sketch' })
+      const preview = await h.spendPreview(req.requestId)
+      await h.spendDecide(req.requestId, decision)
+      const jobs = await waitAll(req.requestId)
+      // 파일럿이면 후속 카드가 생겼는지 (승인하지 않고 둔다)
+      await new Promise((r) => setTimeout(r, 500))
+      const followUp = h.spendList().find((r) => r.parentRequestId === req.requestId)
+      return { request: h.spendList().find((r) => r.requestId === req.requestId), preview, jobs, followUp, shots: dump() }
+    },
+    shutdown: async () => {
+      await auth.stop().catch(() => {})
+      await host?.stop().catch(() => {})
+      await watcher?.stop().catch(() => {})
+    },
+  }
+}

@@ -1,0 +1,39 @@
+Upload local image, video, audio, or document files and list previously uploaded media IDs for use in generation commands.
+
+Usage:
+  higgsfield upload [command]
+
+Examples:
+  higgsfield upload create ./input.png
+  higgsfield upload create ./brief.pdf
+  higgsfield upload list --image
+  higgsfield upload list --video --size 50
+
+Available Commands:
+  create      Upload a local media or document file
+  list        List uploaded media IDs
+
+Flags:
+  -h, --help   help for upload
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output
+
+Use "higgsfield upload [command] --help" for more information about a command.
+Upload a local media or document file
+
+Usage:
+  higgsfield upload create <file> [flags]
+
+Examples:
+  higgsfield upload create ./reference.png
+  higgsfield upload create ./clip.mp4
+  higgsfield upload create ./source.pdf
+
+Flags:
+  -h, --help   help for create
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

@@ -1,0 +1,104 @@
+  [mcp-srv] 2026-10-09T14:31:52.074Z MCP listening http://127.0.0.1:47123/mcp
+  [mcp-srv] 2026-10-09T14:31:52.695Z POST /mcp auth=present x-conti=none
+    0.2s thread.started {"thread_id":"01a12113-de51-7542-b593-9f29481f69d6"}
+  [mcp-srv] 2026-10-09T14:31:52.706Z POST /mcp auth=present x-conti=none
+  [mcp-srv] 2026-10-09T14:31:52.708Z POST /mcp auth=present x-conti=none
+    0.2s turn.started {}
+    5.0s item.completed [agent_message#item_0] text="I’ll call shots_list for S41, then image_view for shot 0010."
+    9.9s item.started [mcp_tool_call#item_1] server=conti tool=shots_list status=in_progress
+  [mcp-srv] 2026-10-09T14:32:02.410Z POST /mcp auth=present x-conti=none
+  [mcp-srv] 2026-10-09T14:32:02.414Z tool shots_list { seq: 'S41' }
+    9.9s item.completed [mcp_tool_call#item_1] server=conti tool=shots_list status=completed
+   13.5s item.started [mcp_tool_call#item_2] server=conti tool=image_view status=in_progress
+  [mcp-srv] 2026-10-09T14:32:06.006Z POST /mcp auth=present x-conti=none
+  [mcp-srv] 2026-10-09T14:32:06.008Z tool image_view { shot: '0010' }
+   13.5s item.completed [mcp_tool_call#item_2] server=conti tool=image_view status=completed
+   16.2s item.completed [agent_message#item_3] text="ok"
+   16.3s turn.completed {"usage":{"input_tokens":65259,"cached_input_tokens":56576,"cache_write_input_tokens":0,"output_tokens":153,"reasoning_output_tokens":0}}
+== t1-mcp-bearer-ignore: exit=0 signal=null ms=16898 pid=83162 thread=01a12113-de51-7542-b593-9f29481f69d6
+   usage=[{"input_tokens":65259,"cached_input_tokens":56576,"cache_write_input_tokens":0,"output_tokens":153,"reasoning_output_tokens":0}]
+   last_message="ok"
+
+MCP items: [
+ {
+  "type": "item.started",
+  "item": {
+   "id": "item_1",
+   "type": "mcp_tool_call",
+   "server": "conti",
+   "tool": "shots_list",
+   "arguments": {
+    "seq": "S41"
+   },
+   "result": null,
+   "error": null,
+   "status": "in_progress"
+  }
+ },
+ {
+  "type": "item.completed",
+  "item": {
+   "id": "item_1",
+   "type": "mcp_tool_call",
+   "server": "conti",
+   "tool": "shots_list",
+   "arguments": {
+    "seq": "S41"
+   },
+   "result": {
+    "content": [
+     {
+      "type": "text",
+      "text": "{\"shots\":[{\"seq\":\"S41\",\"shot\":\"0010\",\"size\":\"WS\",\"status\":\"done\"},{\"seq\":\"S41\",\"shot\":\"0020\",\"size\":\"MS\",\"status\":\"todo\"}]}"
+     }
+    ],
+    "structured_content": null
+   },
+   "error": null,
+   "status": "completed"
+  }
+ },
+ {
+  "type": "item.started",
+  "item": {
+   "id": "item_2",
+   "type": "mcp_tool_call",
+   "server": "conti",
+   "tool": "image_view",
+   "arguments": {
+    "shot": "0010"
+   },
+   "result": null,
+   "error": null,
+   "status": "in_progress"
+  }
+ },
+ {
+  "type": "item.completed",
+  "item": {
+   "id": "item_2",
+   "type": "mcp_tool_call",
+   "server": "conti",
+   "tool": "image_view",
+   "arguments": {
+    "shot": "0010"
+   },
+   "result": {
+    "content": [
+     {
+      "type": "text",
+      "text": "image for shot 0010 (1x1 red png)"
+     },
+     {
+      "type": "image",
+      "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
+      "mimeType": "image/png"
+     }
+    ],
+    "structured_content": null
+   },
+   "error": null,
+   "status": "completed"
+  }
+ }
+]

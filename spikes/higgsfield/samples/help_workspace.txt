@@ -1,0 +1,28 @@
+List available workspaces, select the active workspace, or return jobs to your private account context.
+
+Usage:
+  higgsfield workspace [command]
+
+Aliases:
+  workspace, ws
+
+Examples:
+  higgsfield workspace list
+  higgsfield workspace set <workspace_id>
+  higgsfield workspace status
+  higgsfield workspace unset
+
+Available Commands:
+  list        List workspaces available to your account
+  set         Select a workspace for future requests
+  status      Show the currently selected workspace
+  unset       Clear the selected workspace
+
+Flags:
+  -h, --help   help for workspace
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output
+
+Use "higgsfield workspace [command] --help" for more information about a command.

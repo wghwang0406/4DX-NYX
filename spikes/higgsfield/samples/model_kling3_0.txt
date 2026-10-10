@@ -1,0 +1,10 @@
+Kling v3.0 (kling3_0, video)
+
+PARAM         TYPE           DEFAULT  REQUIRED  CLI
+aspect_ratio  16:9,9:16,1:1  16:9               
+duration      integer        5                  
+end_image     object|null    —                  use --end-image <path-or-id>
+mode          std,pro,4k     std                
+prompt        string         —        yes       
+sound         on,off         on                 
+start_image   object|null    —                  use --start-image <path-or-id>

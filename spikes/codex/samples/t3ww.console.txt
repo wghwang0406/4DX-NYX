@@ -1,0 +1,31 @@
+    0.2s thread.started {"thread_id":"01a12111-8c69-7ca1-b67b-5ce047e019bb"}
+    0.3s turn.started {}
+    5.7s item.completed [agent_message#item_0] text="I’ll run the two commands in order, once each.\n"
+    6.7s item.started [command_execution#item_1] cmd="/bin/zsh -lc 'curl -s https://example.com | head -c 50'" status=in_progress exit=null
+    6.7s item.completed [command_execution#item_1] cmd="/bin/zsh -lc 'curl -s https://example.com | head -c 50'" status=completed exit=0
+    9.2s item.started [command_execution#item_2] cmd="/bin/zsh -lc 'printf hi > out.txt'" status=in_progress exit=null
+    9.2s item.completed [command_execution#item_2] cmd="/bin/zsh -lc 'printf hi > out.txt'" status=completed exit=0
+   11.2s item.completed [agent_message#item_3] text="a: ok\nb: ok"
+   11.3s turn.completed {"usage":{"input_tokens":54250,"cached_input_tokens":44160,"cache_write_input_tokens":0,"output_tokens":100,"reasoning_output_tokens":0}}
+== t3-sandbox-workspace-write: exit=0 signal=null ms=12397 pid=82561 thread=01a12111-8c69-7ca1-b67b-5ce047e019bb
+   usage=[{"input_tokens":54250,"cached_input_tokens":44160,"cache_write_input_tokens":0,"output_tokens":100,"reasoning_output_tokens":0}]
+   last_message="a: ok\nb: ok"
+out.txt exists: true "hi"
+command items: [
+ {
+  "id": "item_1",
+  "type": "command_execution",
+  "command": "/bin/zsh -lc 'curl -s https://example.com | head -c 50'",
+  "aggregated_output": "",
+  "exit_code": 0,
+  "status": "completed"
+ },
+ {
+  "id": "item_2",
+  "type": "command_execution",
+  "command": "/bin/zsh -lc 'printf hi > out.txt'",
+  "aggregated_output": "",
+  "exit_code": 0,
+  "status": "completed"
+ }
+]

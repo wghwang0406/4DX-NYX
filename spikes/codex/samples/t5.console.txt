@@ -1,0 +1,8 @@
+    0.1s thread.started {"thread_id":"01a12111-8c5d-79a1-bc49-1d01f3322508"}
+    0.2s turn.started {}
+    5.8s item.completed [agent_message#item_0] text="{\"ok\":true,\"n\":42}"
+    5.8s turn.completed {"usage":{"input_tokens":16068,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":19,"reasoning_output_tokens":0}}
+== t5-schema: exit=0 signal=null ms=6163 pid=82559 thread=01a12111-8c5d-79a1-bc49-1d01f3322508
+   usage=[{"input_tokens":16068,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":19,"reasoning_output_tokens":0}]
+   last_message="{\"ok\":true,\"n\":42}"
+-o file: {"ok":true,"n":42}

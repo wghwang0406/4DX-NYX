@@ -1,0 +1,25 @@
+Create custom Soul character references from uploaded images, list existing references, inspect one reference, or wait for training to finish.
+
+Usage:
+  higgsfield soul-id [command]
+
+Examples:
+  higgsfield soul-id create --name Alice --soul-2 --image ./alice1.png --image ./alice2.jpg --image ./alice3.png --image ./alice4.jpg --image ./alice5.png
+  higgsfield soul-id create --name Alice --soul-cinematic --image <upload_id> --image ./alice2.jpg
+  higgsfield soul-id list
+  higgsfield soul-id wait <soul_id>
+
+Available Commands:
+  create      Create a custom Soul reference
+  get         Show one custom Soul reference
+  list        List custom Soul references
+  wait        Poll Soul training until it finishes
+
+Flags:
+  -h, --help   help for soul-id
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output
+
+Use "higgsfield soul-id [command] --help" for more information about a command.

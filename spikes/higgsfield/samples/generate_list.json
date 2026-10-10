@@ -1,0 +1,170 @@
+[
+  {
+    "created_at": "2026-10-02T05:54:46.211513Z",
+    "display_name": "Nano Banana Pro",
+    "id": "940f26b7-5f27-4628-a2ad-5e51ea86db51",
+    "job_type": "nano_banana_pro",
+    "min_result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261002_055446_940f26b7-5f27-4628-a2ad-5e51ea86db51_min.webp",
+    "params": {
+      "application": null,
+      "aspect_ratio": "21:9",
+      "batch_size": 1,
+      "height": 1344,
+      "input_image": null,
+      "input_images": [
+        {
+          "id": "fd45f857-efc6-4eeb-bca9-4fbdb570b823",
+          "type": "media_input",
+          "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/fd45f857-efc6-4eeb-bca9-4fbdb570b823_resize.jpg"
+        }
+      ],
+      "prompt": "Edit the image: make the woman's foot bare with red-painted toenails.\n\nCHANGE: Remove the red patent-leather stiletto pump entirely. The same foot, in the exact same position and angle, is now bare: the ball of the foot and toes rest on the black ribbed accelerator pedal, the bare heel lifted in the air where the shoe heel was. Five natural toes visible, toenails painted glossy classic red. Natural skin with the same tone, texture and fine hair as the existing ankle and leg. Where the shoe's stiletto heel and sole were, show continuous black carpet floor with the same texture and lighting.\n\nPRESERVE EXACTLY:\n- The leg and ankle: position, skin tone, skin texture, hair, lighting\n- The brushed-aluminum brake pedal with black stripes, the black ribbed accelerator pedal, pedal arms\n- Black carpet floor mat, dark car interior trim\n- Camera angle, framing, crop, focus and depth of field\n- Hard sunlight from upper right, existing highlights and shadows\n- Color grade, palette, contrast, grain, falloff\n\nONLY CHANGE: the shoe becomes a bare foot with red toenail polish. 100% identical otherwise.",
+      "resolution": "2k",
+      "surface": null,
+      "width": 3168
+    },
+    "result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261002_055446_940f26b7-5f27-4628-a2ad-5e51ea86db51.png",
+    "status": "completed"
+  },
+  {
+    "created_at": "2026-10-01T09:13:13.421988Z",
+    "display_name": "Nano Banana Pro",
+    "id": "14bca6e7-1b60-4d56-b956-ecc7b07a3296",
+    "job_type": "nano_banana_pro",
+    "min_result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261001_091313_14bca6e7-1b60-4d56-b956-ecc7b07a3296_min.webp",
+    "params": {
+      "application": null,
+      "aspect_ratio": "16:9",
+      "batch_size": 1,
+      "height": 1536,
+      "input_image": null,
+      "input_images": [
+        {
+          "id": "b9c90e34-23a8-480d-9396-90a13ebc7c88",
+          "type": "media_input",
+          "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/b9c90e34-23a8-480d-9396-90a13ebc7c88_resize.jpg"
+        },
+        {
+          "id": "7d4a84cb-5700-4e5b-b093-a88a21b0cff8",
+          "type": "media_input",
+          "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/7d4a84cb-5700-4e5b-b093-a88a21b0cff8_resize.jpg"
+        }
+      ],
+      "prompt": "Edit the first reference image as a restrained post-processing transformation. Use the first reference as the exact base image and the second reference only for nighttime color grading and lighting character, never for layout or architecture. Preserve the exact camera framing, composition, building architecture, roof silhouette, decorative dancheong, doors, walls, stairs, stone courtyard, and existing tree-covered background. Change the daytime scene to a deep-blue moonlit night with soft cloud detail. Add evenly spaced traditional iron wall-mounted fire torches along both side wings of the courtyard, with warm amber flames and subtle light grazing the red-and-green palace walls and reflecting across the stone foreground. Keep the scene legible, photorealistic and cinematic, matching the second reference’s cool night shadows and warm firelight. Change only the time of day, lighting and color grade, plus the requested torches; keep everything else identical.",
+      "resolution": "2k",
+      "surface": null,
+      "width": 2752
+    },
+    "result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261001_091313_14bca6e7-1b60-4d56-b956-ecc7b07a3296.png",
+    "status": "completed"
+  },
+  {
+    "created_at": "2026-10-01T09:06:45.190778Z",
+    "display_name": "Nano Banana Pro",
+    "id": "58569e17-ab81-4f4b-985e-636f6ac6ce04",
+    "job_type": "nano_banana_pro",
+    "min_result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261001_090645_58569e17-ab81-4f4b-985e-636f6ac6ce04_min.webp",
+    "params": {
+      "application": null,
+      "aspect_ratio": "16:9",
+      "batch_size": 1,
+      "height": 1536,
+      "input_image": null,
+      "input_images": [
+        {
+          "id": "2c8cba9f-199d-4544-a09b-ce4297b58bf9",
+          "type": "media_input",
+          "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/2c8cba9f-199d-4544-a09b-ce4297b58bf9_resize.jpg"
+        },
+        {
+          "id": "00c49f8b-4fed-43cf-bceb-cace4f4b1eb6",
+          "type": "media_input",
+          "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/00c49f8b-4fed-43cf-bceb-cace4f4b1eb6_resize.jpg"
+        }
+      ],
+      "prompt": "Edit the first reference image. Use it as the exact base image and preserve its camera position, centered frontal composition, main palace gate geometry, dancheong, stairs, stone foreground and architectural proportions. Use the second reference only for night color grade and lighting continuity. CHANGE: transform the daytime scene into the same deep-blue moonlit night mood, with restrained warm amber lantern light on the palace and subtle reflections on the stone. Replace the visible forest behind and around the main gate with a continuous, believable Korean palace complex: layered tiled roofs, adjoining palace halls and red-and-green courtyard buildings that connect naturally to the existing structure. PRESERVE EXACTLY: the main gate shape and placement, roof lines, doors, central axis, stairs, foreground layout and photorealistic architectural detail. Keep the result cinematic and visually consistent with the second reference.",
+      "resolution": "2k",
+      "surface": null,
+      "width": 2752
+    },
+    "result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261001_090645_58569e17-ab81-4f4b-985e-636f6ac6ce04.png",
+    "status": "completed"
+  },
+  {
+    "created_at": "2026-10-01T08:50:31.398376Z",
+    "display_name": "Nano Banana Pro",
+    "id": "9b63ac23-5e28-4672-9840-aee1bbde825d",
+    "job_type": "nano_banana_pro",
+    "min_result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261001_085031_9b63ac23-5e28-4672-9840-aee1bbde825d_min.webp",
+    "params": {
+      "application": null,
+      "aspect_ratio": "16:9",
+      "batch_size": 1,
+      "height": 1536,
+      "input_image": null,
+      "input_images": [
+        {
+          "id": "5933f612-87d2-4b8d-acc7-e93d5e2e6700",
+          "type": "media_input",
+          "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/5933f612-87d2-4b8d-acc7-e93d5e2e6700.png"
+        }
+      ],
+      "prompt": "Recompose the reference as a much more distant, ultra-wide establishing shot of the same Korean palace courtyard at night. Show exactly three distinct traditional Korean palace gates, aligned precisely one behind another on the central axis: the nearest gate is large in the foreground and frames the view through its open central passage; the second gate is clearly visible at mid-distance through that opening; the third gate is smaller and clearly visible at the far end of the courtyard. Keep enough separation between each gate so all three silhouettes and tiled roofs read distinctly, with strong nested depth and a centered vanishing point. CHANGE: move the camera substantially farther back and extend the palace approach to fit the three gates in one coherent perspective. PRESERVE: the reference’s Joseon-era dancheong colors and timber details, dark forested mountain ridge, clouded moonlit sky, warm wall torches, wet irregular stone paving and amber reflections, cinematic photorealism, and balanced cool-blue night against warm firelight. Keep the courtyard empty and the architecture symmetrical.",
+      "resolution": "2k",
+      "surface": null,
+      "width": 2752
+    },
+    "result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261001_085031_9b63ac23-5e28-4672-9840-aee1bbde825d.png",
+    "status": "completed"
+  },
+  {
+    "created_at": "2026-09-29T09:13:55.184829Z",
+    "display_name": "Higgsfield Multiplier Motion Control",
+    "id": "296f130c-24b0-4f6c-98c9-678c133c12d1",
+    "job_type": "hf_mult_motion_control",
+    "min_result_url": null,
+    "params": {
+      "aspect_ratio": "16:9",
+      "batch_size": 1,
+      "bitrate_mode": "high",
+      "duration": 7,
+      "folder_id": null,
+      "generate_audio": false,
+      "height": 1080,
+      "location_character_media_id": null,
+      "medias": [
+        {
+          "data": {
+            "id": "00c60cfc-4778-46db-9bfa-0e349898406b",
+            "type": "media_input",
+            "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/00c60cfc-4778-46db-9bfa-0e349898406b_resize.jpg"
+          },
+          "role": "image"
+        },
+        {
+          "data": {
+            "id": "9df4d1e0-bec8-4d68-9539-836b1427fff6",
+            "type": "media_input",
+            "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/9df4d1e0-bec8-4d68-9539-836b1427fff6.png"
+          },
+          "role": "image"
+        },
+        {
+          "data": {
+            "id": "f59b9819-1fa2-4488-9ccc-b19cc5a61419",
+            "type": "video_input",
+            "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/f59b9819-1fa2-4488-9ccc-b19cc5a61419.mp4"
+          },
+          "role": "video"
+        }
+      ],
+      "prompt": null,
+      "resolution": "1080p",
+      "scene_mode": "off",
+      "width": 1920
+    },
+    "result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20260929_091355_296f130c-24b0-4f6c-98c9-678c133c12d1.mp4",
+    "status": "completed",
+    "thumbnail_url": "https://cdn.higgsfield.ai/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20260929_091355_296f130c-24b0-4f6c-98c9-678c133c12d1_thumbnail.webp"
+  }
+]

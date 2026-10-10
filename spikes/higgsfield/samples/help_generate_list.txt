@@ -1,0 +1,22 @@
+List recent generation jobs
+
+Usage:
+  higgsfield generate list [flags]
+
+Examples:
+  higgsfield generate list
+  higgsfield generate list --video --size 50
+  higgsfield generate list --text
+  higgsfield generate list --json
+
+Flags:
+      --audio      audio jobs only
+  -h, --help       help for list
+      --image      image jobs only
+      --size int   page size (default 20)
+      --text       text jobs only
+      --video      video jobs only
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

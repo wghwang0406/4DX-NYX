@@ -1,0 +1,11 @@
+Soul Cinematic (soul_cinematic, image)
+
+PARAM                TYPE                                DEFAULT  REQUIRED  CLI
+aspect_ratio         1:1,16:9,9:16,4:3,3:4,3:2,2:3,21:9  1:1                
+custom_reference_id  string|null                         —                  
+image_references     array                               —                  use repeated --image-references (or --image)
+prompt               string                              —        yes       
+quality              1.5k,2k                             2k                 
+
+CONSTRAINTS
+- at most one image reference is allowed

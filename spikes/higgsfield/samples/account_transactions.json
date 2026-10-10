@@ -1,0 +1,35 @@
+{
+  "cursor": "5",
+  "items": [
+    {
+      "action": "spend",
+      "created_at": "2026-10-02T05:54:46.303467Z",
+      "credits": -2,
+      "display_name": "Nano Banana Pro"
+    },
+    {
+      "action": "spend",
+      "created_at": "2026-10-01T09:13:13.497589Z",
+      "credits": -2,
+      "display_name": "Nano Banana Pro"
+    },
+    {
+      "action": "spend",
+      "created_at": "2026-10-01T09:06:45.311228Z",
+      "credits": -2,
+      "display_name": "Nano Banana Pro"
+    },
+    {
+      "action": "spend",
+      "created_at": "2026-10-01T08:50:31.511223Z",
+      "credits": -2,
+      "display_name": "Nano Banana Pro"
+    },
+    {
+      "action": "spend",
+      "created_at": "2026-09-29T09:13:55.732081Z",
+      "credits": -77,
+      "display_name": "Higgsfield Genjutsu - Motion Transfer"
+    }
+  ]
+}

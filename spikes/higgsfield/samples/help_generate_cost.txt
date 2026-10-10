@@ -1,0 +1,18 @@
+Estimate credits without creating a job.
+For models, params and media flags match generate create. Local file paths are auto-uploaded.
+Run `higgsfield model get <job_type>` or `higgsfield workflow get <workflow_name>` to inspect accepted params.
+
+Usage:
+  higgsfield generate cost <job_type>|workflow <workflow_name> [--param value]... [flags]
+
+Examples:
+  higgsfield generate cost nano_banana_2 --prompt "cinematic product photo"
+  higgsfield generate cost <video_model> --prompt "slow push-in shot" --image ./first.png
+  higgsfield generate cost workflow reframe --duration 7.1 --resolution 1080p
+
+Flags:
+  -h, --help   help for cost
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

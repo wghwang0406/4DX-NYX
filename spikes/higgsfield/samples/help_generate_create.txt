@@ -1,0 +1,21 @@
+Create an image, video, audio, or 3D job.
+Pass params as --name value.
+Media flags: --image-references, --video-references, --audio-references, --start-image, --end-image.
+Short aliases: --image, --video, --audio.
+Media flags accept a UUID (upload id or job id) or a local file path — paths are auto-uploaded.
+Run `higgsfield model get <job_type>` to inspect accepted params.
+Use --wait to block until each job finishes and print the result URL(s).
+
+Usage:
+  higgsfield generate create <job_type> [--param value]... [flags]
+
+Examples:
+  higgsfield generate create seedance_2_0 --prompt "cinematic product photo" --image-references ./photo.png
+  higgsfield generate create <video_model> --prompt "..." --video-references ./reference.mp4 --wait --wait-timeout 20m --wait-interval 5s
+
+Flags:
+  -h, --help   help for create
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

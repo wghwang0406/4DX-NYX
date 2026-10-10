@@ -1,0 +1,9 @@
+{"type":"thread.started","thread_id":"01a1210f-59cd-7133-867e-3fa21b0680a7"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll call shots_list for S41, then image_view for shot 0010."}}
+{"type":"item.started","item":{"id":"item_1","type":"mcp_tool_call","server":"conti","tool":"shots_list","arguments":{"seq":"S41"},"result":null,"error":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"mcp_tool_call","server":"conti","tool":"shots_list","arguments":{"seq":"S41"},"result":null,"error":{"message":"MCP tool call requires approval, but approval policy is never"},"status":"failed"}}
+{"type":"item.started","item":{"id":"item_2","type":"mcp_tool_call","server":"conti","tool":"image_view","arguments":{"shot":"0010"},"result":null,"error":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_2","type":"mcp_tool_call","server":"conti","tool":"image_view","arguments":{"shot":"0010"},"result":null,"error":{"message":"MCP tool call requires approval, but approval policy is never"},"status":"failed"}}
+{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"ok"}}
+{"type":"turn.completed","usage":{"input_tokens":82637,"cached_input_tokens":74496,"cache_write_input_tokens":0,"output_tokens":150,"reasoning_output_tokens":0}}

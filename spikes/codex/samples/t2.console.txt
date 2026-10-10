@@ -1,0 +1,12 @@
+    0.2s thread.started {"thread_id":"01a12111-8c59-7b01-b67a-a7e3c9f2cb8d"}
+    0.3s turn.started {}
+    6.5s item.started [command_execution#item_0] cmd="/bin/zsh -lc 'cat /Users/wongyeong/Desktop/build/spikes/codex/fixtures/skills/greet/SKILL.md'" status=in_progress exit=null
+    6.5s item.completed [command_execution#item_0] cmd="/bin/zsh -lc 'cat /Users/wongyeong/Desktop/build/spikes/codex/fixtures/skills/greet/SKILL.md'" status=completed exit=0
+    9.7s item.completed [agent_message#item_1] text="CODENAME-ORCHID\nHELLO-FROM-SKILL-7731"
+    9.8s turn.completed {"usage":{"input_tokens":35559,"cached_input_tokens":30720,"cache_write_input_tokens":0,"output_tokens":77,"reasoning_output_tokens":0}}
+== t2-agents: exit=0 signal=null ms=11419 pid=82554 thread=01a12111-8c59-7b01-b67a-a7e3c9f2cb8d
+   usage=[{"input_tokens":35559,"cached_input_tokens":30720,"cache_write_input_tokens":0,"output_tokens":77,"reasoning_output_tokens":0}]
+   last_message="CODENAME-ORCHID\nHELLO-FROM-SKILL-7731"
+files read (command_execution items): [
+  "/bin/zsh -lc 'cat /Users/wongyeong/Desktop/build/spikes/codex/fixtures/skills/greet/SKILL.md'"
+]

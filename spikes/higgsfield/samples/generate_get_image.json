@@ -1,0 +1,27 @@
+{
+  "created_at": "2026-10-02T05:54:46.211513Z",
+  "display_name": "Nano Banana Pro",
+  "id": "940f26b7-5f27-4628-a2ad-5e51ea86db51",
+  "job_type": "nano_banana_pro",
+  "min_result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261002_055446_940f26b7-5f27-4628-a2ad-5e51ea86db51_min.webp",
+  "params": {
+    "application": null,
+    "aspect_ratio": "21:9",
+    "batch_size": 1,
+    "height": 1344,
+    "input_image": null,
+    "input_images": [
+      {
+        "id": "fd45f857-efc6-4eeb-bca9-4fbdb570b823",
+        "type": "media_input",
+        "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/fd45f857-efc6-4eeb-bca9-4fbdb570b823_resize.jpg"
+      }
+    ],
+    "prompt": "Edit the image: make the woman's foot bare with red-painted toenails.\n\nCHANGE: Remove the red patent-leather stiletto pump entirely. The same foot, in the exact same position and angle, is now bare: the ball of the foot and toes rest on the black ribbed accelerator pedal, the bare heel lifted in the air where the shoe heel was. Five natural toes visible, toenails painted glossy classic red. Natural skin with the same tone, texture and fine hair as the existing ankle and leg. Where the shoe's stiletto heel and sole were, show continuous black carpet floor with the same texture and lighting.\n\nPRESERVE EXACTLY:\n- The leg and ankle: position, skin tone, skin texture, hair, lighting\n- The brushed-aluminum brake pedal with black stripes, the black ribbed accelerator pedal, pedal arms\n- Black carpet floor mat, dark car interior trim\n- Camera angle, framing, crop, focus and depth of field\n- Hard sunlight from upper right, existing highlights and shadows\n- Color grade, palette, contrast, grain, falloff\n\nONLY CHANGE: the shoe becomes a bare foot with red toenail polish. 100% identical otherwise.",
+    "resolution": "2k",
+    "surface": null,
+    "width": 3168
+  },
+  "result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261002_055446_940f26b7-5f27-4628-a2ad-5e51ea86db51.png",
+  "status": "completed"
+}

@@ -1,0 +1,12 @@
+// @conti/genengine — 생성 엔진 공개 API.
+export { ModelTable, ROUTE, type ModelCaps, type ModelsJson } from './models'
+export { RealHiggsfieldCli, CliError, classifyExit, paramsToArgv, parseJsonOut, parseCreateOutput, remoteState, type HiggsfieldCli, type RemoteJob, type CliParams } from './cli'
+export { UploadCache } from './uploads'
+export { downloadTo, imageDims, extFromUrl, type Downloaded, type FetchLike } from './download'
+export { lintPrompt, type LintOptions } from './prompts/lint'
+export { buildContiPrompt, styleLineFor, parseTags, DEFAULT_SKETCH_STYLE, DEFAULT_CINEMATIC_STYLE, type ContiRef, type ContiPromptInput, type BuiltPrompt } from './prompts/conti'
+export { charSheetPrompt, charPlatePrompt, locMasterPrompt, locViewPrompt, propPrompt } from './prompts/assets'
+export { surgicalEditPrompt, restylePrompt } from './prompts/edit'
+export { latestView, pickView, pickShotRefs, currentContiVersion } from './refs'
+export { planRequest, expandNeighbors, PlanError, type JobPlan, type PlanResult, type PlanContext, type PlanOptions, type JobTarget, type ShotTarget, type AssetTarget, type PlanRef, type SpendKind } from './plan'
+export { JobService, JobCapError, JobRecord, JobStatus, TERMINAL, type JobEvent, type JobServiceOptions } from './jobs'

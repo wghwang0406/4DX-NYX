@@ -1,0 +1,51 @@
+{
+  "display_name": "Topaz",
+  "job_type": "topaz_video",
+  "params": [
+    {
+      "name": "aspect_ratio",
+      "type": "string",
+      "default": "auto",
+      "required": false,
+      "enum": [
+        "auto",
+        "21:9",
+        "16:9",
+        "4:3",
+        "1:1",
+        "3:4",
+        "9:16"
+      ]
+    },
+    {
+      "name": "enhancement",
+      "type": "object|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "frame_interpolation",
+      "type": "object|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "resolution",
+      "type": "string",
+      "default": "1080p",
+      "required": false,
+      "enum": [
+        "1080p",
+        "2160p"
+      ]
+    },
+    {
+      "name": "video_references",
+      "type": "array",
+      "default": null,
+      "required": true
+    }
+  ],
+  "rules": [],
+  "type": "video"
+}

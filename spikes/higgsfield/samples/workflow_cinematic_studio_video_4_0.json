@@ -1,0 +1,218 @@
+{
+  "cost_params": [
+    {
+      "name": "duration",
+      "type": "integer",
+      "default": 5,
+      "required": false
+    },
+    {
+      "name": "mode",
+      "type": "string",
+      "default": "t2v",
+      "required": false,
+      "enum": [
+        "t2v",
+        "omni_reference",
+        "video_edit",
+        "video_extension"
+      ]
+    },
+    {
+      "name": "resolution",
+      "type": "string",
+      "default": "720p",
+      "required": false,
+      "enum": [
+        "480p",
+        "720p",
+        "1080p"
+      ]
+    },
+    {
+      "name": "video_references",
+      "type": "array",
+      "default": null,
+      "required": false
+    }
+  ],
+  "display_name": "Cinema Studio 4.0",
+  "job_type": "cinematic_studio_video_4_0",
+  "params": [
+    {
+      "name": "aspect_ratio",
+      "type": "string",
+      "default": "16:9",
+      "required": false,
+      "enum": [
+        "auto",
+        "21:9",
+        "16:9",
+        "4:3",
+        "1:1",
+        "3:4",
+        "9:16"
+      ]
+    },
+    {
+      "name": "audio_references",
+      "type": "array",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "bitrate_mode",
+      "type": "string",
+      "default": "standard",
+      "required": false,
+      "enum": [
+        "standard",
+        "high"
+      ]
+    },
+    {
+      "name": "camera_aperture_id",
+      "type": "string|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "camera_lens_id",
+      "type": "string|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "camera_model_id",
+      "type": "string|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "color_palette",
+      "type": "object|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "duration",
+      "type": "integer",
+      "default": 5,
+      "required": false
+    },
+    {
+      "name": "end_image",
+      "type": "object|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "era_id",
+      "type": "string|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "extension_mode",
+      "type": "string|null",
+      "default": null,
+      "required": false,
+      "enum": [
+        "backward",
+        "forward"
+      ]
+    },
+    {
+      "name": "generate_audio",
+      "type": "boolean",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "genre_id",
+      "type": "string|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "image_references",
+      "type": "array",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "light",
+      "type": "string|null",
+      "default": null,
+      "required": false,
+      "enum": [
+        "preset",
+        "custom",
+        "user"
+      ]
+    },
+    {
+      "name": "light_custom",
+      "type": "array|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "light_id",
+      "type": "string|null",
+      "default": null,
+      "required": false,
+      "enum": [
+        "custom"
+      ]
+    },
+    {
+      "name": "mode",
+      "type": "string",
+      "default": "t2v",
+      "required": false,
+      "enum": [
+        "t2v",
+        "omni_reference",
+        "video_edit",
+        "video_extension"
+      ]
+    },
+    {
+      "name": "pacing_id",
+      "type": "string|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "prompt",
+      "type": "string",
+      "default": null,
+      "required": true
+    },
+    {
+      "name": "resolution",
+      "type": "string",
+      "default": "720p",
+      "required": false,
+      "enum": [
+        "480p",
+        "720p",
+        "1080p"
+      ]
+    },
+    {
+      "name": "start_image",
+      "type": "object|null",
+      "default": null,
+      "required": false
+    },
+    {
+      "name": "video_references",
+      "type": "array",
+      "default": null,
+      "required": false
+    }
+  ],
+  "type": "video"
+}

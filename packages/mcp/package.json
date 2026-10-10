@@ -1,0 +1,28 @@
+{
+  "name": "@conti/mcp",
+  "private": true,
+  "version": "0.0.1",
+  "description": "앱 MCP 서버(conti) — Streamable HTTP, bearer, stateless. 도구는 얇고 로직은 core/domain",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@conti/core": "workspace:*",
+    "@conti/domain": "workspace:*",
+    "@conti/screenplay": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.5"
+  },
+  "optionalDependencies": {
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

@@ -1,0 +1,19 @@
+Poll a job until it finishes
+
+Usage:
+  higgsfield generate wait <id> [flags]
+
+Examples:
+  higgsfield generate wait <job_id>
+  higgsfield generate wait <job_id> --timeout 20m --interval 5s
+  higgsfield generate wait <job_id> --quiet
+
+Flags:
+  -h, --help                help for wait
+      --interval duration   poll interval (default 3s)
+  -q, --quiet               no progress output
+      --timeout duration    max wait duration (default 10m0s)
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

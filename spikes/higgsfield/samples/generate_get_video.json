@@ -1,0 +1,50 @@
+{
+  "created_at": "2026-09-29T09:13:55.184829Z",
+  "display_name": "Higgsfield Multiplier Motion Control",
+  "id": "296f130c-24b0-4f6c-98c9-678c133c12d1",
+  "job_type": "hf_mult_motion_control",
+  "min_result_url": null,
+  "params": {
+    "aspect_ratio": "16:9",
+    "batch_size": 1,
+    "bitrate_mode": "high",
+    "duration": 7,
+    "folder_id": null,
+    "generate_audio": false,
+    "height": 1080,
+    "location_character_media_id": null,
+    "medias": [
+      {
+        "data": {
+          "id": "00c60cfc-4778-46db-9bfa-0e349898406b",
+          "type": "media_input",
+          "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/00c60cfc-4778-46db-9bfa-0e349898406b_resize.jpg"
+        },
+        "role": "image"
+      },
+      {
+        "data": {
+          "id": "9df4d1e0-bec8-4d68-9539-836b1427fff6",
+          "type": "media_input",
+          "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/9df4d1e0-bec8-4d68-9539-836b1427fff6.png"
+        },
+        "role": "image"
+      },
+      {
+        "data": {
+          "id": "f59b9819-1fa2-4488-9ccc-b19cc5a61419",
+          "type": "video_input",
+          "url": "https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/f59b9819-1fa2-4488-9ccc-b19cc5a61419.mp4"
+        },
+        "role": "video"
+      }
+    ],
+    "prompt": null,
+    "resolution": "1080p",
+    "scene_mode": "off",
+    "width": 1920
+  },
+  "result_url": "https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20260929_091355_296f130c-24b0-4f6c-98c9-678c133c12d1.mp4",
+  "status": "completed",
+  "thumbnail_url": "https://cdn.higgsfield.ai/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20260929_091355_296f130c-24b0-4f6c-98c9-678c133c12d1_thumbnail.webp"
+}

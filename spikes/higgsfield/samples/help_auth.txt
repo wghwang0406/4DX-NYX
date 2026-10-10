@@ -1,0 +1,34 @@
+Authenticate with Higgsfield using OAuth 2.0 PKCE and manage the local credentials file.
+
+Usage:
+  higgsfield auth [command]
+
+Examples:
+  higgsfield auth login
+  higgsfield auth token
+  higgsfield auth logout
+
+Available Commands:
+  login       Start browser-based OAuth login
+  logout      Delete the locally stored access token
+  token       Print the current access token
+
+Flags:
+  -h, --help   help for auth
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output
+
+Use "higgsfield auth [command] --help" for more information about a command.
+Print the current access token
+
+Usage:
+  higgsfield auth token [flags]
+
+Flags:
+  -h, --help   help for token
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

@@ -1,0 +1,20 @@
+{
+  "name": "nyx",
+  "private": true,
+  "version": "0.0.1",
+  "description": "NYX — 팀 내부용 콘티 제작 앱 (모노레포)",
+  "packageManager": "pnpm@12.10.1",
+  "scripts": {
+    "dev": "corepack pnpm --filter @conti/studio dev",
+    "build": "corepack pnpm --filter @conti/studio build",
+    "start": "corepack pnpm --filter @conti/studio start",
+    "test": "vitest run",
+    "typecheck": "corepack pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

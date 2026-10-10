@@ -1,0 +1,9 @@
+{"type":"thread.started","thread_id":"01a12111-8c69-7ca1-b67b-5ce047e019bb"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"I’ll run the two commands in order, once each.\n"}}
+{"type":"item.started","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'curl -s https://example.com | head -c 50'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"/bin/zsh -lc 'curl -s https://example.com | head -c 50'","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"/bin/zsh -lc 'printf hi > out.txt'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"/bin/zsh -lc 'printf hi > out.txt'","aggregated_output":"","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"a: ok\nb: ok"}}
+{"type":"turn.completed","usage":{"input_tokens":54250,"cached_input_tokens":44160,"cache_write_input_tokens":0,"output_tokens":100,"reasoning_output_tokens":0}}

@@ -1,0 +1,30 @@
+Create jobs, estimate cost, inspect results, and list recent image, video, or text generations.
+
+Usage:
+  higgsfield generate [command]
+
+Aliases:
+  generate, gen
+
+Examples:
+  higgsfield generate create nano_banana_2 --prompt "studio product photo"
+  higgsfield generate workflow reframe --video ./source.mp4 --aspect-ratio 9:16
+  higgsfield generate cost nano_banana_2 --prompt "studio product photo"
+  higgsfield generate wait <job_id>
+
+Available Commands:
+  cost        Estimate generation cost
+  create      Create a generation job
+  get         Show one generation job
+  list        List recent generation jobs
+  wait        Poll a job until it finishes
+  workflow    Create a workflow generation
+
+Flags:
+  -h, --help   help for generate
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output
+
+Use "higgsfield generate [command] --help" for more information about a command.

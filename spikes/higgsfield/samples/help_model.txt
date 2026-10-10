@@ -1,0 +1,58 @@
+List Higgsfield models and inspect each model's job_type, media type, and accepted parameters.
+
+Usage:
+  higgsfield model [command]
+
+Examples:
+  higgsfield model list
+  higgsfield model list --image
+  higgsfield model get nano_banana_2
+
+Available Commands:
+  get         Show model parameters and defaults
+  list        List image, video, text, and audio generation models
+
+Flags:
+  -h, --help   help for model
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output
+
+Use "higgsfield model [command] --help" for more information about a command.
+Show model parameters and defaults
+
+Usage:
+  higgsfield model get <job_type> [flags]
+
+Examples:
+  higgsfield model get nano_banana_2
+  higgsfield model get <job_type> --json
+
+Flags:
+  -h, --help   help for get
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output
+List image, video, text, and audio generation models
+
+Usage:
+  higgsfield model list [flags]
+
+Examples:
+  higgsfield model list
+  higgsfield model list --video
+  higgsfield model list --audio
+  higgsfield model list --image --json
+
+Flags:
+      --audio   show audio models only
+  -h, --help    help for list
+      --image   show image models only
+      --text    show text models only
+      --video   show video models only
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

@@ -1,0 +1,25 @@
+{
+  "name": "@conti/genengine",
+  "private": true,
+  "version": "0.0.1",
+  "description": "생성 엔진 — JobService(승인→업로드→생성→다운로드→버전), Higgsfield CLI 래퍼, 프롬프트 조립·린트, 모델 표",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@conti/core": "workspace:*",
+    "@conti/domain": "workspace:*",
+    "cross-spawn": "^7.0.6",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^26.6.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

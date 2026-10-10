@@ -1,0 +1,21 @@
+List uploaded media IDs
+
+Usage:
+  higgsfield upload list [flags]
+
+Examples:
+  higgsfield upload list
+  higgsfield upload list --audio
+  higgsfield upload list --video --size 50
+
+Flags:
+      --audio           audio uploads only
+      --cursor string   pagination cursor
+  -h, --help            help for list
+      --image           image uploads only
+      --size int        page size (default 20)
+      --video           video uploads only
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

@@ -1,0 +1,1 @@
+2026-10-09T14:33:11.262270Z ERROR codex_core::tools::router: error=code-mode host is disabled

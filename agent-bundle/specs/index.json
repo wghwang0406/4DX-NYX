@@ -1,0 +1,937 @@
+{
+  "_generated_by": "tools/build-spec-index.mts",
+  "_note": "줄 번호는 1-based inclusive. # 섹션은 하위 ##/### 를 포함한다. spec_get{spec, sections:[id…]} 로 필요한 구간만 읽는다.",
+  "lira": {
+    "file": "skills/Lira/SKILL.md",
+    "sha256": "d6f54c348add35d1869d231706c7bd2792547a4cb760a0e9b33a4e270598f78c",
+    "lines": 620,
+    "sections": [
+      {
+        "id": "lira-image-prompt-optimization",
+        "title": "Lira — Image Prompt Optimization",
+        "level": 1,
+        "start": 19,
+        "end": 105,
+        "chars": 3641
+      },
+      {
+        "id": "the-4-d-methodology",
+        "title": "The 4-D Methodology",
+        "level": 2,
+        "start": 28,
+        "end": 75,
+        "chars": 2373
+      },
+      {
+        "id": "operating-modes",
+        "title": "Operating modes",
+        "level": 2,
+        "start": 77,
+        "end": 88,
+        "chars": 518
+      },
+      {
+        "id": "response-format",
+        "title": "Response format",
+        "level": 2,
+        "start": 90,
+        "end": 105,
+        "chars": 388
+      },
+      {
+        "id": "model-routing",
+        "title": "Model routing",
+        "level": 1,
+        "start": 107,
+        "end": 151,
+        "chars": 3247
+      },
+      {
+        "id": "critical-anti-fail-rules-all-models",
+        "title": "CRITICAL: Anti-fail rules (all models)",
+        "level": 1,
+        "start": 153,
+        "end": 226,
+        "chars": 3796
+      },
+      {
+        "id": "1-natural-prose-not-keyword-stacking",
+        "title": "1. Natural prose, not keyword stacking",
+        "level": 2,
+        "start": 159,
+        "end": 163,
+        "chars": 282
+      },
+      {
+        "id": "2-don-t-bloat-the-prompt",
+        "title": "2. Don't bloat the prompt",
+        "level": 2,
+        "start": 165,
+        "end": 168,
+        "chars": 213
+      },
+      {
+        "id": "3-positive-negative",
+        "title": "3. Positive > negative",
+        "level": 2,
+        "start": 170,
+        "end": 178,
+        "chars": 567
+      },
+      {
+        "id": "4-aspect-ratio-resolution-platform-parameters",
+        "title": "4. Aspect ratio & resolution = platform parameters",
+        "level": 2,
+        "start": 180,
+        "end": 183,
+        "chars": 242
+      },
+      {
+        "id": "5-technical-lighting-materials-not-vague-mood",
+        "title": "5. Technical lighting & materials, not vague mood",
+        "level": 2,
+        "start": 185,
+        "end": 189,
+        "chars": 343
+      },
+      {
+        "id": "6-palette-control",
+        "title": "6. Palette control",
+        "level": 2,
+        "start": 191,
+        "end": 195,
+        "chars": 317
+      },
+      {
+        "id": "7-character-consistency-soul-id-not-prose",
+        "title": "7. Character consistency = Soul ID, not prose",
+        "level": 2,
+        "start": 197,
+        "end": 200,
+        "chars": 270
+      },
+      {
+        "id": "8-illustration-drift-photoreal",
+        "title": "8. Illustration drift (photoreal)",
+        "level": 2,
+        "start": 202,
+        "end": 206,
+        "chars": 301
+      },
+      {
+        "id": "9-text-tattoos-real-people",
+        "title": "9. Text, tattoos, real people",
+        "level": 2,
+        "start": 208,
+        "end": 215,
+        "chars": 465
+      },
+      {
+        "id": "10-edits-nbp-first-minimal-change-exhaustive-preserve",
+        "title": "10. Edits: NBP first + minimal CHANGE, exhaustive PRESERVE",
+        "level": 2,
+        "start": 217,
+        "end": 226,
+        "chars": 530
+      },
+      {
+        "id": "reference-modules-merged-below",
+        "title": "Reference modules (merged below)",
+        "level": 1,
+        "start": 228,
+        "end": 246,
+        "chars": 797
+      },
+      {
+        "id": "model-rules-full-reference",
+        "title": "Model Rules — Full Reference",
+        "level": 1,
+        "start": 248,
+        "end": 369,
+        "chars": 5919
+      },
+      {
+        "id": "higgsfield-soul-2-0-characters",
+        "title": "Higgsfield Soul 2.0 — characters",
+        "level": 2,
+        "start": 259,
+        "end": 274,
+        "chars": 850
+      },
+      {
+        "id": "higgsfield-soul-cinema-locations-and-cinematic-frames",
+        "title": "Higgsfield Soul Cinema — locations and cinematic frames",
+        "level": 2,
+        "start": 276,
+        "end": 292,
+        "chars": 926
+      },
+      {
+        "id": "cinema-studio-ai-cast-character-reference-sheets",
+        "title": "Cinema Studio AI Cast — character reference sheets",
+        "level": 2,
+        "start": 294,
+        "end": 301,
+        "chars": 415
+      },
+      {
+        "id": "nano-banana-pro-nbp-edits-always-first-and-props",
+        "title": "Nano Banana Pro (NBP) — edits (always first) and props",
+        "level": 2,
+        "start": 303,
+        "end": 324,
+        "chars": 1277
+      },
+      {
+        "id": "seedream-4-5-texture-pass-only",
+        "title": "Seedream 4.5 — texture pass ONLY",
+        "level": 2,
+        "start": 326,
+        "end": 333,
+        "chars": 420
+      },
+      {
+        "id": "gpt-image-2-last-resort-local-surgery-location-view-changes",
+        "title": "GPT Image 2 — last-resort local surgery + location view changes",
+        "level": 2,
+        "start": 335,
+        "end": 350,
+        "chars": 793
+      },
+      {
+        "id": "pre-send-checklist-any-model",
+        "title": "Pre-send checklist (any model)",
+        "level": 2,
+        "start": 352,
+        "end": 369,
+        "chars": 814
+      },
+      {
+        "id": "formulas-building-blocks",
+        "title": "Formulas & Building Blocks",
+        "level": 1,
+        "start": 371,
+        "end": 491,
+        "chars": 5350
+      },
+      {
+        "id": "platform-parameters-set-in-the-ui-never-in-prompt-text",
+        "title": "Platform parameters (set in the UI, never in prompt text)",
+        "level": 2,
+        "start": 376,
+        "end": 389,
+        "chars": 776
+      },
+      {
+        "id": "tech-blocks-camera-film-stock",
+        "title": "Tech blocks (camera + film stock)",
+        "level": 2,
+        "start": 391,
+        "end": 414,
+        "chars": 1066
+      },
+      {
+        "id": "palette-wrapper",
+        "title": "Palette wrapper",
+        "level": 2,
+        "start": 416,
+        "end": 428,
+        "chars": 650
+      },
+      {
+        "id": "cinematographer-mood-references",
+        "title": "Cinematographer / mood references",
+        "level": 2,
+        "start": 430,
+        "end": 440,
+        "chars": 582
+      },
+      {
+        "id": "negatives-positive-only-approach",
+        "title": "Negatives — positive-only approach",
+        "level": 2,
+        "start": 442,
+        "end": 455,
+        "chars": 715
+      },
+      {
+        "id": "surgical-edit-template-nbp-first-the-whole-edit-lane-uses-it",
+        "title": "Surgical-edit template (NBP first — the whole edit lane uses it)",
+        "level": 2,
+        "start": 457,
+        "end": 481,
+        "chars": 1019
+      },
+      {
+        "id": "standing-rules",
+        "title": "Standing rules",
+        "level": 2,
+        "start": 483,
+        "end": 491,
+        "chars": 390
+      },
+      {
+        "id": "prompt-type-templates",
+        "title": "Prompt-Type Templates",
+        "level": 1,
+        "start": 493,
+        "end": 619,
+        "chars": 6297
+      },
+      {
+        "id": "character-sheet-photoreal-3-panel-soul-2-0",
+        "title": "Character sheet (photoreal, 3-panel) — Soul 2.0",
+        "level": 2,
+        "start": 499,
+        "end": 539,
+        "chars": 2046
+      },
+      {
+        "id": "location-environment-soul-cinema",
+        "title": "Location / environment — Soul Cinema",
+        "level": 2,
+        "start": 541,
+        "end": 567,
+        "chars": 1464
+      },
+      {
+        "id": "prop-sheet-nbp-gpt-image-2",
+        "title": "Prop sheet — NBP / GPT Image 2",
+        "level": 2,
+        "start": 569,
+        "end": 589,
+        "chars": 997
+      },
+      {
+        "id": "image-edit-nbp-first-always",
+        "title": "Image edit — NBP first, always",
+        "level": 2,
+        "start": 591,
+        "end": 612,
+        "chars": 1227
+      },
+      {
+        "id": "video-seedance-kling-note",
+        "title": "Video (Seedance / Kling) — note",
+        "level": 2,
+        "start": 614,
+        "end": 619,
+        "chars": 319
+      }
+    ]
+  },
+  "cinedance": {
+    "file": "skills/Cinedance/SKILL.md",
+    "sha256": "c5d54894bee833e65a12d3f91b01418aae261701fe97cbc16be68334e1e37eff",
+    "lines": 1345,
+    "sections": [
+      {
+        "id": "cinedance-v4-seedance-2-0-prompt-director-system",
+        "title": "CINEDANCE V4 — Seedance 2.0 Prompt Director System",
+        "level": 1,
+        "start": 15,
+        "end": 1344,
+        "chars": 32919
+      },
+      {
+        "id": "core-objective",
+        "title": "Core objective",
+        "level": 2,
+        "start": 29,
+        "end": 49,
+        "chars": 484
+      },
+      {
+        "id": "internal-4-d-agent-methodology",
+        "title": "Internal 4-D agent methodology",
+        "level": 2,
+        "start": 51,
+        "end": 169,
+        "chars": 2865
+      },
+      {
+        "id": "d1-deconstruct",
+        "title": "D1. Deconstruct",
+        "level": 3,
+        "start": 55,
+        "end": 97,
+        "chars": 848
+      },
+      {
+        "id": "d2-diagnose",
+        "title": "D2. Diagnose",
+        "level": 3,
+        "start": 99,
+        "end": 124,
+        "chars": 972
+      },
+      {
+        "id": "d3-develop",
+        "title": "D3. Develop",
+        "level": 3,
+        "start": 126,
+        "end": 153,
+        "chars": 645
+      },
+      {
+        "id": "d4-deliver",
+        "title": "D4. Deliver",
+        "level": 3,
+        "start": 155,
+        "end": 169,
+        "chars": 302
+      },
+      {
+        "id": "final-prompt-architecture",
+        "title": "Final prompt architecture",
+        "level": 2,
+        "start": 171,
+        "end": 197,
+        "chars": 671
+      },
+      {
+        "id": "scene-context",
+        "title": "Scene context",
+        "level": 2,
+        "start": 199,
+        "end": 215,
+        "chars": 467
+      },
+      {
+        "id": "output-settings",
+        "title": "Output settings",
+        "level": 2,
+        "start": 217,
+        "end": 253,
+        "chars": 882
+      },
+      {
+        "id": "active-references",
+        "title": "Active references",
+        "level": 2,
+        "start": 255,
+        "end": 269,
+        "chars": 482
+      },
+      {
+        "id": "character-description-rule",
+        "title": "Character description rule",
+        "level": 2,
+        "start": 271,
+        "end": 314,
+        "chars": 1308
+      },
+      {
+        "id": "location-map",
+        "title": "Location map",
+        "level": 2,
+        "start": 316,
+        "end": 341,
+        "chars": 552
+      },
+      {
+        "id": "first-frame-occupancy-lock",
+        "title": "First-frame occupancy lock",
+        "level": 2,
+        "start": 343,
+        "end": 367,
+        "chars": 759
+      },
+      {
+        "id": "spatial-blocking-lock",
+        "title": "Spatial blocking lock",
+        "level": 2,
+        "start": 369,
+        "end": 415,
+        "chars": 996
+      },
+      {
+        "id": "gaze-line-and-body-orientation-lock",
+        "title": "Gaze line and body orientation lock",
+        "level": 2,
+        "start": 417,
+        "end": 439,
+        "chars": 534
+      },
+      {
+        "id": "landmark-proximity-lock",
+        "title": "Landmark proximity lock",
+        "level": 2,
+        "start": 441,
+        "end": 469,
+        "chars": 519
+      },
+      {
+        "id": "format-mode-decision",
+        "title": "Format mode decision",
+        "level": 2,
+        "start": 471,
+        "end": 519,
+        "chars": 1291
+      },
+      {
+        "id": "multi-shot-continuity-lock",
+        "title": "Multi-shot continuity lock",
+        "level": 2,
+        "start": 521,
+        "end": 545,
+        "chars": 704
+      },
+      {
+        "id": "cut-types",
+        "title": "Cut types",
+        "level": 2,
+        "start": 547,
+        "end": 575,
+        "chars": 313
+      },
+      {
+        "id": "optics-and-lens-control-module",
+        "title": "Optics and lens control module",
+        "level": 2,
+        "start": 577,
+        "end": 610,
+        "chars": 642
+      },
+      {
+        "id": "lens-decision-tree",
+        "title": "Lens decision tree",
+        "level": 2,
+        "start": 612,
+        "end": 639,
+        "chars": 1211
+      },
+      {
+        "id": "content-fov-alignment-rule",
+        "title": "Content-FOV alignment rule",
+        "level": 2,
+        "start": 641,
+        "end": 655,
+        "chars": 632
+      },
+      {
+        "id": "angle-of-view-language-bank",
+        "title": "Angle of view language bank",
+        "level": 2,
+        "start": 657,
+        "end": 695,
+        "chars": 2605
+      },
+      {
+        "id": "47-standard-normal",
+        "title": "47° Standard normal",
+        "level": 3,
+        "start": 661,
+        "end": 665,
+        "chars": 325
+      },
+      {
+        "id": "84-classic-wide",
+        "title": "84° Classic wide",
+        "level": 3,
+        "start": 667,
+        "end": 671,
+        "chars": 419
+      },
+      {
+        "id": "107-wide-rectilinear",
+        "title": "107° Wide rectilinear",
+        "level": 3,
+        "start": 673,
+        "end": 677,
+        "chars": 386
+      },
+      {
+        "id": "29-short-telephoto-portrait",
+        "title": "29° Short telephoto portrait",
+        "level": 3,
+        "start": 679,
+        "end": 683,
+        "chars": 423
+      },
+      {
+        "id": "18-classic-telephoto",
+        "title": "18° Classic telephoto",
+        "level": 3,
+        "start": 685,
+        "end": 689,
+        "chars": 376
+      },
+      {
+        "id": "8-super-telephoto-observation",
+        "title": "8° Super-telephoto observation",
+        "level": 3,
+        "start": 691,
+        "end": 695,
+        "chars": 572
+      },
+      {
+        "id": "telephoto-visual-outcome-stack",
+        "title": "Telephoto visual outcome stack",
+        "level": 2,
+        "start": 697,
+        "end": 710,
+        "chars": 639
+      },
+      {
+        "id": "wide-angle-visual-outcome-stack",
+        "title": "Wide-angle visual outcome stack",
+        "level": 2,
+        "start": 712,
+        "end": 724,
+        "chars": 464
+      },
+      {
+        "id": "multi-shot-lens-consistency",
+        "title": "Multi-shot lens consistency",
+        "level": 2,
+        "start": 726,
+        "end": 761,
+        "chars": 783
+      },
+      {
+        "id": "anti-drift-locks",
+        "title": "Anti-drift locks",
+        "level": 2,
+        "start": 763,
+        "end": 783,
+        "chars": 713
+      },
+      {
+        "id": "optics-anti-patterns",
+        "title": "Optics anti-patterns",
+        "level": 2,
+        "start": 785,
+        "end": 799,
+        "chars": 409
+      },
+      {
+        "id": "camera-and-composition",
+        "title": "Camera and composition",
+        "level": 2,
+        "start": 801,
+        "end": 842,
+        "chars": 791
+      },
+      {
+        "id": "handheld-camera-rule",
+        "title": "Handheld camera rule",
+        "level": 2,
+        "start": 844,
+        "end": 862,
+        "chars": 373
+      },
+      {
+        "id": "physics-lock",
+        "title": "Physics lock",
+        "level": 2,
+        "start": 864,
+        "end": 942,
+        "chars": 1403
+      },
+      {
+        "id": "lighting-priority-lock",
+        "title": "Lighting priority lock",
+        "level": 2,
+        "start": 944,
+        "end": 967,
+        "chars": 713
+      },
+      {
+        "id": "lighting-direction",
+        "title": "Lighting direction",
+        "level": 2,
+        "start": 969,
+        "end": 986,
+        "chars": 507
+      },
+      {
+        "id": "action-timing",
+        "title": "Action timing",
+        "level": 2,
+        "start": 988,
+        "end": 1014,
+        "chars": 477
+      },
+      {
+        "id": "dialogue-rules",
+        "title": "Dialogue rules",
+        "level": 2,
+        "start": 1016,
+        "end": 1047,
+        "chars": 635
+      },
+      {
+        "id": "prior-audio-context",
+        "title": "Prior audio context",
+        "level": 2,
+        "start": 1049,
+        "end": 1057,
+        "chars": 244
+      },
+      {
+        "id": "context-isolation-rules",
+        "title": "Context isolation rules",
+        "level": 2,
+        "start": 1059,
+        "end": 1079,
+        "chars": 449
+      },
+      {
+        "id": "reference-control",
+        "title": "Reference control",
+        "level": 2,
+        "start": 1081,
+        "end": 1124,
+        "chars": 633
+      },
+      {
+        "id": "prompt-density-control",
+        "title": "Prompt density control",
+        "level": 2,
+        "start": 1126,
+        "end": 1155,
+        "chars": 570
+      },
+      {
+        "id": "style-language",
+        "title": "Style language",
+        "level": 2,
+        "start": 1157,
+        "end": 1186,
+        "chars": 682
+      },
+      {
+        "id": "negative-constraints",
+        "title": "Negative constraints",
+        "level": 2,
+        "start": 1188,
+        "end": 1231,
+        "chars": 1093
+      },
+      {
+        "id": "seedance-safe-language",
+        "title": "Seedance-safe language",
+        "level": 2,
+        "start": 1233,
+        "end": 1274,
+        "chars": 549
+      },
+      {
+        "id": "quality-suffix",
+        "title": "Quality suffix",
+        "level": 2,
+        "start": 1276,
+        "end": 1284,
+        "chars": 234
+      },
+      {
+        "id": "silent-self-qa-before-output",
+        "title": "Silent self-QA before output",
+        "level": 2,
+        "start": 1286,
+        "end": 1311,
+        "chars": 919
+      },
+      {
+        "id": "final-output-rule",
+        "title": "Final output rule",
+        "level": 2,
+        "start": 1313,
+        "end": 1344,
+        "chars": 645
+      }
+    ]
+  },
+  "acting": {
+    "file": "skills/Acting/SKILL.md",
+    "sha256": "81448aa3e411977fa643eee3fc28f58b60f47e312e180aede2aab72ba81bc73b",
+    "lines": 459,
+    "sections": [
+      {
+        "id": "acting-system",
+        "title": "ACTING SYSTEM",
+        "level": 1,
+        "start": 15,
+        "end": 30,
+        "chars": 833
+      },
+      {
+        "id": "character-performance-for-ai-video-generation-seedance-2-0",
+        "title": "Character Performance for AI Video Generation (Seedance 2.0)",
+        "level": 2,
+        "start": 16,
+        "end": 30,
+        "chars": 817
+      },
+      {
+        "id": "part-i-the-craft-what-good-acting-is",
+        "title": "PART I — THE CRAFT: WHAT GOOD ACTING IS",
+        "level": 1,
+        "start": 32,
+        "end": 164,
+        "chars": 7440
+      },
+      {
+        "id": "1-definition",
+        "title": "1. Definition",
+        "level": 2,
+        "start": 34,
+        "end": 48,
+        "chars": 921
+      },
+      {
+        "id": "2-the-five-pillars-of-every-scene",
+        "title": "2. The five pillars of every scene",
+        "level": 2,
+        "start": 50,
+        "end": 88,
+        "chars": 2254
+      },
+      {
+        "id": "3-listening-and-reaction-the-main-test-of-quality",
+        "title": "3. Listening and reaction — the main test of quality",
+        "level": 2,
+        "start": 90,
+        "end": 107,
+        "chars": 1074
+      },
+      {
+        "id": "4-the-body-the-character-s-physical-life",
+        "title": "4. The body: the character's physical life",
+        "level": 2,
+        "start": 109,
+        "end": 149,
+        "chars": 2469
+      },
+      {
+        "id": "5-speech-how-good-acting-sounds",
+        "title": "5. Speech: how good acting sounds",
+        "level": 2,
+        "start": 151,
+        "end": 164,
+        "chars": 675
+      },
+      {
+        "id": "part-ii-writing-the-acting-prompt-architecture",
+        "title": "PART II — WRITING THE ACTING: PROMPT ARCHITECTURE",
+        "level": 1,
+        "start": 166,
+        "end": 329,
+        "chars": 8653
+      },
+      {
+        "id": "6-the-character-acting-master-profile",
+        "title": "6. The character acting master profile",
+        "level": 2,
+        "start": 168,
+        "end": 227,
+        "chars": 3395
+      },
+      {
+        "id": "7-eye-life-mandatory-in-every-profile-and-every-scene",
+        "title": "7. Eye life — mandatory in every profile and every scene",
+        "level": 2,
+        "start": 229,
+        "end": 248,
+        "chars": 1152
+      },
+      {
+        "id": "8-scene-adaptation-the-master-profile-is-rewritten-never-pasted",
+        "title": "8. Scene adaptation — the master profile is rewritten, never pasted",
+        "level": 2,
+        "start": 250,
+        "end": 273,
+        "chars": 1355
+      },
+      {
+        "id": "9-voice-fixed-identity-never-adapted",
+        "title": "9. Voice: fixed identity, never adapted",
+        "level": 2,
+        "start": 275,
+        "end": 293,
+        "chars": 804
+      },
+      {
+        "id": "10-states-not-transitions",
+        "title": "10. States, not transitions",
+        "level": 2,
+        "start": 295,
+        "end": 301,
+        "chars": 379
+      },
+      {
+        "id": "11-ensemble-and-space",
+        "title": "11. Ensemble and space",
+        "level": 2,
+        "start": 303,
+        "end": 329,
+        "chars": 1510
+      },
+      {
+        "id": "part-iii-quality-control",
+        "title": "PART III — QUALITY CONTROL",
+        "level": 1,
+        "start": 331,
+        "end": 380,
+        "chars": 4264
+      },
+      {
+        "id": "12-atlas-of-bad-acting-recognize-and-fix-in-the-prompt",
+        "title": "12. Atlas of bad acting — recognize and fix in the prompt",
+        "level": 2,
+        "start": 333,
+        "end": 351,
+        "chars": 2191
+      },
+      {
+        "id": "13-the-performance-scale-self-check",
+        "title": "13. The performance scale (self-check)",
+        "level": 2,
+        "start": 353,
+        "end": 363,
+        "chars": 1086
+      },
+      {
+        "id": "14-pre-send-checklist",
+        "title": "14. Pre-send checklist",
+        "level": 2,
+        "start": 365,
+        "end": 380,
+        "chars": 955
+      },
+      {
+        "id": "part-iv-worked-example-invented-character-use-as-a-pattern",
+        "title": "PART IV — WORKED EXAMPLE (invented character, use as a pattern)",
+        "level": 1,
+        "start": 382,
+        "end": 445,
+        "chars": 3479
+      },
+      {
+        "id": "15-master-profile",
+        "title": "15. Master profile",
+        "level": 2,
+        "start": 384,
+        "end": 415,
+        "chars": 1917
+      },
+      {
+        "id": "16-scene-adaptation-example",
+        "title": "16. Scene adaptation example",
+        "level": 2,
+        "start": 417,
+        "end": 445,
+        "chars": 1494
+      },
+      {
+        "id": "final-axioms",
+        "title": "FINAL AXIOMS",
+        "level": 1,
+        "start": 447,
+        "end": 458,
+        "chars": 726
+      }
+    ]
+  }
+}

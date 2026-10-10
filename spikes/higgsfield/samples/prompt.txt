@@ -1,0 +1,2 @@
+prompt from file 한글
+line2

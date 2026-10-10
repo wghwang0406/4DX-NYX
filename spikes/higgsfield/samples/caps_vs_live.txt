@@ -1,0 +1,56 @@
+X  bytedance_video_upscale (model, job_type=bytedance_video_upscale)
+    - refs: CAPS=True / CLI=False
+    - soul_id: CAPS=None / CLI=False
+    extra params: ['fps', 'model_version']
+X  cinematic_studio_2_5 (model, job_type=cinematic_studio_2_5)
+    - mode: CAPS=미정의 / CLI=NOENUM
+    rules: ['at most 14 image references are allowed']
+X  cinematic_studio_3_0 (workflow, job_type=cinematic_studio_3_0)
+    - soul_id: CAPS=None / CLI=False
+    extra params: ['enhance_prompt', 'generate_audio', 'genre', 'multi_prompt', 'multi_shot_mode', 'multi_shots', 'preset_id', 'prompt_language', 'speedramp']
+X  cinematic_studio_soul_cast (workflow, job_type=cinematic_studio_soul_cast)
+    - aspect: CAPS=('1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '9:21') / CLI=('1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '21:9', '9:21')
+    extra params: ['budget']
+OK cinematic_studio_soul_location (workflow, job_type=cinematic_studio_soul_location)
+X  cinematic_studio_video_3_5 (workflow, job_type=cinematic_studio_video_3_5)
+    - soul_id: CAPS=None / CLI=False
+    extra params: ['camera_style', 'color_grading', 'enhance_prompt', 'generate_audio', 'genre', 'light_scheme', 'multi_prompt', 'multi_shot_mode', 'multi_shots', 'prompt_language', 'style_prompt']
+X  cinematic_studio_video_4_0 (workflow, job_type=cinematic_studio_video_4_0)
+    - mode: CAPS=미정의 / CLI=('t2v', 'omni_reference', 'video_edit', 'video_extension')
+    - soul_id: CAPS=None / CLI=False
+    extra params: ['bitrate_mode', 'camera_aperture_id', 'camera_lens_id', 'camera_model_id', 'color_palette', 'era_id', 'extension_mode', 'generate_audio', 'genre_id', 'light', 'light_custom', 'light_id', 'pacing_id']
+X  gpt_image_2 (model, job_type=gpt_image_2)
+    - aspect: CAPS=('1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3') / CLI=('auto', '1:1', '4:3', '3:4', '16:9', '21:9', '9:16', '3:2', '2:3', '4:5', '5:4')
+    extra params: ['background', 'is_inpaint', 'mask']
+X  gpt_image_2_5 (model, job_type=gpt_image_2_5)
+    - aspect: CAPS=('1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '27:16', '16:27', '9:8', '8:9', '4:5', '5:4') / CLI=('auto', '1:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16', '21:9', '27:16', '16:27', '9:8', '8:9', '4:5', '5:4')
+    extra params: ['background', 'variant']
+X  kling3_0 (model, job_type=kling3_0)
+    - soul_id: CAPS=None / CLI=False
+    extra params: ['sound']
+OK nano_banana_pro (model, job_type=nano_banana_pro)
+    rules: ['a non-empty prompt or at least one image reference is required', 'at most 14 image references are allowed']
+X  seedance_2_0 (model, job_type=seedance_2_0)
+    - mode: CAPS=미정의 / CLI=('std', 'fast')
+    - soul_id: CAPS=None / CLI=False
+    extra params: ['bitrate_mode', 'generate_audio', 'genre']
+    rules: ['at most 9 image references are allowed (counting start_image and end_image)', 'at most 3 video_references are allowed', 'at most 3 audio_references are allowed', 'at most 12 reference files are allowed in total across images, videos, and audios (including start_image and end_image)', 'audio_references require at least one image, video, start_image, or end_image', "mode 'fast' supports only 480p/720p; use mode 'std' for 1080p/4k"]
+X  seedance_2_5 (model, job_type=seedance_2_5)
+    - mode: CAPS=미정의 / CLI=('t2v', 'omni_reference', 'video_edit', 'video_extension')
+    - soul_id: CAPS=None / CLI=False
+    extra params: ['bitrate_mode', 'draft', 'draft_job_id', 'extension_mode', 'generate_audio']
+    rules: ["mode 't2v' does not accept reference media", "mode 'omni_reference' requires at least one reference media item", 'at most 50 reference media items are allowed in total', "mode 'video_edit' requires exactly one video reference", "mode 'video_extension' requires at least one video reference", "'extension_mode' is required for mode 'video_extension'", "'extension_mode' is only allowed for mode 'video_extension'", 'at most 30 images are allowed (counting start_image and end_image)', "start_image and end_image are only allowed for mode 'omni_reference'", 'draft and draft_job_id are mutually exclusive']
+OK seedream_v4_5 (model, job_type=seedream_v4_5)
+    rules: ['at most 14 image_references are allowed']
+OK soul_cinema_studio (workflow, job_type=soul_cinema_studio)
+    extra params: ['enhance_prompt', 'style_id']
+OK soul_cinematic (model, job_type=soul_cinematic)
+    rules: ['at most one image reference is allowed']
+OK text2image_soul_v2 (model, job_type=text2image_soul_v2)
+    extra params: ['style_id']
+    rules: ['at most one image reference is allowed', 'style_id cannot be combined with image_references']
+X  topaz_video (model, job_type=topaz_video)
+    - refs: CAPS=True / CLI=False
+    - soul_id: CAPS=None / CLI=False
+    extra params: ['enhancement', 'frame_interpolation']
+?  video_upscale: no live JSON (workflow get failed or not fetched)

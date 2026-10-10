@@ -1,0 +1,39 @@
+List Higgsfield workflows and inspect each workflow's media type, accepted parameters, and cost parameters.
+
+Usage:
+  higgsfield workflow [flags]
+  higgsfield workflow [command]
+
+Examples:
+  higgsfield workflow list
+  higgsfield workflow get draw_to_video
+  higgsfield workflow get reframe --json
+
+Available Commands:
+  get         Show workflow parameters
+  list        List workflows
+
+Flags:
+  -h, --help   help for workflow
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output
+
+Use "higgsfield workflow [command] --help" for more information about a command.
+Create a workflow generation. Pass params as --name value. Media flags accept UUIDs or local file paths.
+Run `higgsfield workflow get <workflow_name>` to inspect accepted params.
+
+Usage:
+  higgsfield generate workflow <workflow_name> [--param value]... [flags]
+
+Examples:
+  higgsfield generate workflow draw_to_video --video ./source.mp4 --sketch ./frame.png --timestamp 3.2 --prompt "make the jacket red" --wait
+  higgsfield generate workflow reframe --video ./source.mp4 --aspect-ratio 9:16 --resolution 720p --wait
+
+Flags:
+  -h, --help   help for workflow
+
+Global Flags:
+      --json       print raw JSON responses
+      --no-color   disable color output

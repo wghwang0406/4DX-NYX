@@ -1,0 +1,80 @@
+=== https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261002_055446_940f26b7-5f27-4628-a2ad-5e51ea86db51.png
+HTTP/2 200 
+content-type: image/png
+content-length: 9777690
+date: Fri, 09 Oct 2026 14:26:47 GMT
+last-modified: Fri, 02 Oct 2026 05:55:28 GMT
+etag: "11d8745a9918cb4dbb75206de7c86383"
+x-amz-storage-class: INTELLIGENT_TIERING
+x-amz-server-side-encryption: AES256
+cache-control: public, max-age=31536000, immutable
+accept-ranges: bytes
+server: AmazonS3
+via: 1.1 851c60873d0c702305aa9fe8e9ef3f16.cloudfront.net (CloudFront)
+alt-svc: h3=":443"; ma=86400
+x-robots-tag: noindex, nofollow
+vary: Origin
+x-cache: Miss from cloudfront
+x-amz-cf-pop: ICN57-P3
+x-amz-cf-id: WoYChkvcl5vgBQAt4TjNaYDP9dq5Hc9aBQTj-9eVM-HZuZg0thwcVg==
+
+
+=== https://d8j0ntlcm91z4.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20261002_055446_940f26b7-5f27-4628-a2ad-5e51ea86db51_min.webp
+HTTP/2 200 
+content-type: image/webp
+content-length: 165034
+date: Fri, 09 Oct 2026 14:26:48 GMT
+last-modified: Fri, 02 Oct 2026 05:55:28 GMT
+etag: "e669f08f8e070260b49e91556f554614"
+x-amz-storage-class: INTELLIGENT_TIERING
+x-amz-server-side-encryption: AES256
+cache-control: public, max-age=31536000, immutable
+accept-ranges: bytes
+server: AmazonS3
+via: 1.1 60095a9d60e34681b0f66377dc01af0e.cloudfront.net (CloudFront)
+alt-svc: h3=":443"; ma=86400
+x-robots-tag: noindex, nofollow
+vary: Origin
+x-cache: Miss from cloudfront
+x-amz-cf-pop: ICN57-P3
+x-amz-cf-id: KCpkFYj9cWVY64YKJXDhD5EhRqwrS0-aDnj0-7JaSMWS9QQ3064kZQ==
+
+
+=== https://d2ol7oe51mr4n9.cloudfront.net/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/7c6107ab-3efb-4d1f-9a86-cb56faed17f8.png
+HTTP/2 200 
+content-type: image/png
+content-length: 184
+date: Fri, 09 Oct 2026 14:26:49 GMT
+last-modified: Fri, 09 Oct 2026 14:26:16 GMT
+etag: "b6b132fa386bc1034925b106898443e7"
+x-amz-server-side-encryption: AES256
+accept-ranges: bytes
+server: AmazonS3
+via: 1.1 0dba71cca95df92f38106d566ce87f88.cloudfront.net (CloudFront)
+alt-svc: h3=":443"; ma=86400
+x-robots-tag: noindex, nofollow
+vary: Origin
+x-cache: Miss from cloudfront
+x-amz-cf-pop: SEA900-P13
+x-amz-cf-id: XrLuqReDEXdSEh-zIy7_r0d7pFr8FTZjqR2_gvimwFCmtu3TjvpanA==
+
+
+=== https://cdn.higgsfield.ai/user_31tcG6RC7S5IfEbZ5vliD8h8Mjt/hf_20260929_091355_296f130c-24b0-4f6c-98c9-678c133c12d1_thumbnail.webp
+HTTP/2 200 
+date: Fri, 09 Oct 2026 14:26:48 GMT
+content-type: image/webp
+content-length: 173640
+etag: "9917cea7b8854219511269ed83aa938b"
+last-modified: Tue, 29 Sep 2026 09:18:38 GMT
+accept-ranges: bytes
+server: cloudflare
+cf-cache-status: DYNAMIC
+set-cookie: __cf_bm=aqdb70OcPDjMNaNakdjgFtnq7adigKsy3WZyOcCOerQ-1791556008.3668008-1.0.1.1-y61dRkO8d32TC9VPMPbP4j7Gsh8skRx3D4bT7JCaOKqb_ofYv.4hTf7_gD3Xl7Lr7i26RHt9.nN5rNoNtnrwd2Q3Z2_Pys6amcGxVAVNv7Zj6OViqqBY8M3YrxoYjPE9; HttpOnly; SameSite=None; Secure; Path=/; Domain=higgsfield.ai; Expires=Fri, 09 Oct 2026 14:56:48 GMT
+expect-ct: max-age=86400, enforce
+referrer-policy: same-origin
+x-content-type-options: nosniff
+content-security-policy: frame-ancestors 'self' https://higgsfield.ai http://localhost:3000
+x-xss-protection: 1; mode=block
+cf-ray: a47e0ffc4f7998ff-ICN
+
+

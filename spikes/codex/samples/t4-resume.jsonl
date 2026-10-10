@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"01a12111-8c59-7b01-b67a-a7e3c9f2cb8d"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc pwd","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"/bin/zsh -lc pwd","aggregated_output":"/Users/wongyeong/Desktop/build/spikes/codex/fixtures/projB\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"CODENAME-ORCHID\n/Users/wongyeong/Desktop/build/spikes/codex/fixtures/projB"}}
+{"type":"turn.completed","usage":{"input_tokens":71755,"cached_input_tokens":66304,"cache_write_input_tokens":0,"output_tokens":139,"reasoning_output_tokens":0}}

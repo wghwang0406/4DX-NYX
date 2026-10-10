@@ -1,0 +1,92 @@
+---- sandbox help tail
+  -p, --profile <CONFIG_PROFILE>
+          Layer $CODEX_HOME/<name>.config.toml on top of the base user config
+
+  -C, --cd <DIR>
+          Working directory used for profile resolution and command execution
+
+      --include-managed-config
+          Include managed requirements while resolving an explicit permissions profile
+
+      --allow-unix-socket <ALLOW_UNIX_SOCKETS>
+          Allow the sandboxed command to bind/connect AF_UNIX sockets rooted at this path. Relative
+          paths are resolved against the current directory. Repeat to allow multiple paths
+
+      --log-denials
+          While the command runs, capture macOS sandbox denials via `log stream` and print them
+          after exit
+
+  -h, --help
+          Print help (see a summary with '-h')
+---- codex sandbox mode=read-only (no model):
+curl: (6) Could not resolve host: example.com
+ curl_exit=0
+/bin/sh: out-read-only.txt: Operation not permitted
+write_exit=1
+---- codex sandbox mode=workspace-write (no model):
+curl: (6) Could not resolve host: example.com
+ curl_exit=0
+write_exit=0
+out-workspace-write.txt
+---- codex doctor:
+Codex Doctor v0.162.0 · macos-aarch64
+
+Notes
+   ⚠ security     CrowdStrike Falcon can interfere with Codex. Verify Codex exclusions.
+   ⚠ threads      2 issues - rollout files are missing from the state DB; duplicate thread inventory entries found
+─────────────────────────────────────────────────────────────
+
+Environment
+  ✓ system       ko-KR
+      os                       Mac OS 26.6.2 [64-bit]
+      OS language              ko-KR
+      LANG                     C.UTF-8
+      VISUAL                   not set
+      EDITOR                   not set
+  ✓ disk         sufficient free disk space (1644.1 GiB)
+      warning threshold        5.0 GiB
+      failure threshold        1.0 GiB
+      CODEX_HOME available     1644.1 GiB
+      worktree available       1644.1 GiB
+  ⚠ security     CrowdStrike Falcon can interfere with Codex. Verify Codex exclusions.
+      endpoint products        CrowdStrike Falcon
+      exclusion targets        signing team 2DC432GLL2 plus the installed Codex app identity, signed codex agent, and required helpers
+    ▸ Codex exclusions         not verified (expected Codex application and helper exclusions)
+    → CrowdStrike Falcon: Add a certificate or IOA exclusion for Codex. If sensor overhead continues, exclude the Codex agent from sensor visibility. Keep monitoring descendant processes.
+  ✓ runtime      npm (package /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin, bin /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin, resources /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/codex-resources, path /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/codex-path)
+      version                  0.162.0
+      install method           npm (package /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin, bin /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin, resources /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/codex-resources, path /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/codex-path)
+      commit                   unknown
+      executable               /opt/homebrew/lib/node_m…-apple-darwin/bin/codex
+  ✓ install      consistent
+      context                  npm (package /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin, bin /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin, resources /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/codex-resources, path /opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/codex-path)
+      managed by               npm: yes · bun: no · pnpm: no · Vite+: no · package root /opt/homebrew/lib/node_modules/@openai/codex
+      PATH entries (1)         /opt/homebrew/bin/codex
+      npm update target        not inspected (PATH helpers are not executed)
+  ✓ search       file exists (bundled, `/opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/codex-path/rg`)
+      search command           /opt/homebrew/lib/node_m…le-darwin/codex-path/rg
+      search provider          bundled
+      search command readiness file exists
+  ✓ git          git executable found; execution not verified
+      selected git             /opt/homebrew/bin/git
+      repo detected            false
+      PATH entries (2)         /opt/homebrew/bin/git
+                               /usr/bin/git
+      git execution            not inspected (PATH helpers are not executed)
+  ✓ terminal     VS Code 1.138.0
+      terminal                 VS Code
+      TERM_PROGRAM             vscode
+      terminal version         1.138.0
+      stdin is terminal        false
+      stdout is terminal       false
+      stderr is terminal       false
+      terminal size            80x24
+      color output             disabled (stdout is not a terminal)
+      COLORTERM                truecolor
+      effective locale         C.UTF-8
+      VSCODE_INJECTION         present
+  ✓ title        default · project codex
+      title source             default
+      title items              activity, project-name
+      activity item            true
+doctor exit=0
