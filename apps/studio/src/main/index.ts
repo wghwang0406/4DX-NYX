@@ -20,7 +20,9 @@ else {
   const appData = app.getPath('appData')
   const nyx = join(appData, 'NYX')
   const old = join(appData, '@conti', 'studio')
-  app.setPath('userData', !existsSyncFs(nyx) && existsSyncFs(old) ? old : nyx)
+  // Chromium 이 시작하자마자 NYX 폴더(캐시 등)를 만들어 버리므로 "폴더가 있나"가 아니라 "앱 데이터가 있나"로 판단한다
+  const hasData = (d: string) => ['recent.json', 'settings.json', 'publish.json', 'py-env'].some((f) => existsSyncFs(join(d, f)))
+  app.setPath('userData', !hasData(nyx) && hasData(old) ? old : nyx)
 }
 installLogging()
 

@@ -69,9 +69,10 @@ sh('npm', ['install', '--omit=dev', '--no-package-lock', '--no-audit', '--no-fun
 // 3) 리소스: uv 바이너리 (앱 데이터에 있으면 그걸, 없으면 내려받기)
 rmSync(RES, { recursive: true, force: true })
 mkdirSync(join(RES, 'bin'), { recursive: true })
-const uv = await ensureUv({ projectDir: join(ROOT, 'py', 'media'), dataDir: join(homedir(), 'Library', 'Application Support', 'NYX') }).catch(() =>
-  ensureUv({ projectDir: join(ROOT, 'py', 'media'), dataDir: join(tmpdir(), 'nyx-pack-uv') }),
-)
+// 이미 받아 둔 uv 를 쓰고(앱 데이터 NYX / 예전 개발 폴더), 없으면 임시 폴더에 받는다 — 앱 데이터 폴더를 새로 만들지 않게
+const appSupport = join(homedir(), 'Library', 'Application Support')
+const have = [join(appSupport, 'NYX', 'tools', 'uv'), join(appSupport, '@conti', 'studio', 'tools', 'uv')].find((p) => existsSync(p))
+const uv = have ?? (await ensureUv({ projectDir: join(ROOT, 'py', 'media'), dataDir: join(tmpdir(), 'nyx-pack-uv') }))
 copyFileSync(uv, join(RES, 'bin', 'uv'))
 chmodSync(join(RES, 'bin', 'uv'), 0o755)
 
