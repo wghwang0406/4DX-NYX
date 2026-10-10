@@ -53,7 +53,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { root, project, sequences, seq, setSeq, nav, setNav } = useProject()
+  const { root, project, sequences, seq, setSeq, nav, setNav, close: closeProject } = useProject()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [selectedShot, setSelectedShot] = useState<string | null>(null)
   const [playhead, setPlayhead] = useState(0)
@@ -119,6 +119,27 @@ function Shell() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [playPause])
+
+  // 프로젝트가 바뀌면 선택·설정 화면을 접는다
+  useEffect(() => {
+    setSelectedShot(null)
+    setPlayhead(0)
+    setPlaying(false)
+    setShowDiag(false)
+  }, [root])
+
+  // 메뉴 막대: 설정… / 새 프로젝트… (프로젝트가 열려 있으면 닫고 시작 화면의 만들기 칸으로)
+  useEffect(
+    () =>
+      window.conti?.onMenu((a) => {
+        if (a === 'settings') setShowDiag(true)
+        else {
+          sessionStorage.setItem('nyx_new_project', '1')
+          void closeProject()
+        }
+      }),
+    [closeProject],
+  )
 
   // 캡처·검증용: ?shot=0020 이면 그 컷을 선택한 채로 연다
   useEffect(() => {
@@ -197,6 +218,7 @@ function Shell() {
         }}
         onDiagnostics={() => setShowDiag(true)}
         diagActive={showDiag}
+        demo={demo}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -205,7 +227,8 @@ function Shell() {
         {showDiag ? <SettingsView /> : nav === '소스' ? <SourceView /> : nav === '에셋' && !demo ? <AssetsView /> : !scene ? <EmptyState /> : workArea}
       </main>
 
-      <ChatPanel scene={scene} selectedShot={selectedShot} demo={demo} />
+      {/* 프로젝트가 바뀌면 채팅 패널을 새로 (스레드는 프로젝트마다 따로 저장된다) */}
+      <ChatPanel key={root ?? 'none'} scene={scene} selectedShot={selectedShot} demo={demo} />
     </div>
   )
 }

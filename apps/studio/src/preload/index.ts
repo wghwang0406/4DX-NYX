@@ -16,6 +16,9 @@ const api: Api = {
     openPath: (root) => invoke('project:openPath', root),
     current: () => invoke('project:current'),
     recent: () => invoke('project:recent'),
+    close: () => invoke('project:close'),
+    busy: () => invoke('project:busy'),
+    forgetRecent: (root) => invoke('project:forgetRecent', root),
   },
   sequence: {
     list: () => invoke('sequence:list'),
@@ -116,6 +119,16 @@ contextBridge.exposeInMainWorld('conti', {
   video,
   publish,
   app: appApi,
+  onMenu(fn: (action: 'new-project' | 'settings') => void) {
+    const a = () => fn('new-project')
+    const b = () => fn('settings')
+    ipcRenderer.on('menu:new-project', a)
+    ipcRenderer.on('menu:settings', b)
+    return () => {
+      ipcRenderer.removeListener('menu:new-project', a)
+      ipcRenderer.removeListener('menu:settings', b)
+    }
+  },
   onUpdate(fn: (u: UpdateInfo) => void) {
     const handler = (_e: unknown, u: UpdateInfo) => fn(u)
     ipcRenderer.on('app:update', handler)

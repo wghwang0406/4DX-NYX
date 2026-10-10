@@ -21,6 +21,7 @@ declare global {
       publish: PublishApi
       app: AppApi
       onUpdate(fn: (u: UpdateInfo) => void): () => void
+      onMenu(fn: (action: 'new-project' | 'settings') => void): () => void
       onPublishProgress(fn: (p: PublishProgress) => void): () => void
       onFeedbackChange(fn: (e: { added: number; open?: number }) => void): () => void
       onVideoProgress(fn: (p: VideoProgress) => void): () => void

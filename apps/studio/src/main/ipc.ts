@@ -13,6 +13,7 @@ import { LayoutService } from './layout'
 import { VideoService } from './video'
 import { PublishService } from './publish'
 import { AppInfo } from './appinfo'
+import { buildMenu } from './menu'
 import type { ExportKind } from '../shared/layout-ipc'
 import type { AuthTool, LoginOptions } from '../shared/auth-ipc'
 
@@ -61,15 +62,25 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
     }
     const p = s.getProject()
     await pushRecent(root, p.title, p.code)
+    broadcast({ type: 'project' })
+    void refreshMenu()
     return { root, project: p }
   }
 
-  const requireStore = () => {
-    if (!store) throw new Error('열린 프로젝트가 없습니다')
-    return store
+  /** 프로젝트 닫기 — 진행 중 생성 작업은 디스크에 기록돼 있어 다시 열면 이어서 폴링한다 (JobService 복구) */
+  async function detach() {
+    unsubscribe?.()
+    unsubscribe = null
+    await watcher?.stop().catch(() => {})
+    watcher = null
+    await host?.stop().catch(() => {})
+    host = null
+    store = null
+    broadcast({ type: 'project' })
+    void refreshMenu()
   }
 
-  ipcMain.handle('project:openDialog', async () => {
+  async function openViaDialog() {
     const win = getWindow()
     const r = await dialog.showOpenDialog(win!, {
       title: '프로젝트 폴더 열기 (config.md 가 있는 폴더)',
@@ -85,6 +96,47 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
       return attach(s, picked)
     }
     return attach(await ProjectStore.open(found), found)
+  }
+
+  /** 메뉴에서 연 경우 — 실패하면 대화상자로 알린다 (렌더러는 project 변경 방송으로 따라온다) */
+  async function menuOpen(fn: () => Promise<unknown>) {
+    try {
+      await fn()
+    } catch (e) {
+      dialog.showErrorBox('프로젝트를 열 수 없습니다', (e as Error).message)
+    }
+  }
+
+  async function refreshMenu() {
+    await buildMenu(
+      {
+        open: () => void menuOpen(openViaDialog),
+        openRecent: (root) => void menuOpen(async () => attach(await ProjectStore.open(root), root)),
+        newProject: () => getWindow()?.webContents.send('menu:new-project'),
+        close: () => void detach(),
+        settings: () => getWindow()?.webContents.send('menu:settings'),
+        recent: () => loadRecent(),
+        current: () => store?.root ?? null,
+      },
+      getWindow,
+    ).catch((e) => console.error('메뉴 만들기 실패', e))
+  }
+  app.whenReady().then(() => refreshMenu())
+
+  const requireStore = () => {
+    if (!store) throw new Error('열린 프로젝트가 없습니다')
+    return store
+  }
+
+  ipcMain.handle('project:openDialog', () => openViaDialog())
+  ipcMain.handle('project:close', () => detach())
+  /** 전환 전에: 진행 중 생성 작업 수 (닫아도 유실되진 않지만 알려 준다) */
+  ipcMain.handle('project:busy', () => ({ jobs: host?.jobs().filter((j) => !['done', 'failed', 'cancelled', 'unknown'].includes(j.status)).length ?? 0 }))
+  ipcMain.handle('project:forgetRecent', async (_e, root: string) => {
+    const list = (await loadRecent()).filter((r) => r.root !== root)
+    await writeAtomic(recentPath(), JSON.stringify(list, null, 2))
+    void refreshMenu()
+    return list
   })
 
   ipcMain.handle('project:createDialog', async (_e, init: { code: string; title: string }) => {

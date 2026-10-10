@@ -104,6 +104,40 @@ function createWindow(): BrowserWindow {
         app.quit()
       }, 2500)
     })
+  } else if (process.env.CONTI_E2E_SWITCH) {
+    // 프로젝트 전환: 사이드바 메뉴 열기(캡처) → 최근 목록의 다른 프로젝트 클릭 → 확인 → 닫기 → 시작 화면
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(async () => {
+        const out = process.env.CONTI_E2E_OUT ?? '/tmp/conti-switch.json'
+        const shots = process.env.CONTI_E2E_SHOTDIR ?? '/tmp'
+        const js = (c: string) => win.webContents.executeJavaScript(c)
+        const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+        const r: Record<string, unknown> = {}
+        try {
+          r.before = ipcHandle!.currentRoot()
+          r.menu = await js(`(() => { const b = document.querySelector('[title$="프로젝트 바꾸기"]'); if (!b) return 'no button'; b.click(); return 'ok' })()`)
+          await wait(600)
+          await writeFile(join(shots, 'switch_menu.png'), (await win.webContents.capturePage()).toPNG())
+          const target = process.env.CONTI_E2E_SWITCH!
+          r.click = await js(`(() => { const b = [...document.querySelectorAll('button[title]')].find((x) => x.title === ${JSON.stringify(target)}); if (!b) return 'no recent'; b.click(); return 'ok' })()`)
+          await wait(2500)
+          r.after = ipcHandle!.currentRoot()
+          r.sidebarTitle = await js(`document.querySelector('[title$="프로젝트 바꾸기"]')?.textContent ?? ''`)
+          await writeFile(join(shots, 'switch_after.png'), (await win.webContents.capturePage()).toPNG())
+          // 닫기
+          await js(`document.querySelector('[title$="프로젝트 바꾸기"]').click()`)
+          await wait(400)
+          r.closeClick = await js(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.includes('프로젝트 닫기')); if (!b) return 'no close'; b.click(); return 'ok' })()`)
+          await wait(1500)
+          r.closed = ipcHandle!.currentRoot()
+          r.startScreen = await js(`document.body.textContent.includes('프로젝트 폴더를 열거나 새로 만듭니다')`)
+        } catch (e) {
+          r.error = String((e as Error).stack ?? e)
+        }
+        await writeFile(out, JSON.stringify(r, null, 2))
+        app.quit()
+      }, 2500)
+    })
   } else if (process.env.CONTI_E2E_QA7) {
     // M7: 진단 내보내기 + 새 버전 알림(사내 서버 latest) + 설정 저장
     win.webContents.once('did-finish-load', () => {

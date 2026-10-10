@@ -1,6 +1,7 @@
 import { ChevronsLeft, ChevronsRight, Folder, FileText, Film, Box, ListTree, LayoutGrid, Layers, Send, Settings } from 'lucide-react'
 import type { Scene, NavItem } from '../data/sampleScene'
 import { navItems } from '../data/sampleScene'
+import ProjectSwitcher from './ProjectSwitcher'
 
 const navIcons: Record<NavItem, typeof Film> = {
   소스: Film,
@@ -22,9 +23,11 @@ interface Props {
   onSelectNav: (n: NavItem) => void
   onDiagnostics: () => void
   diagActive: boolean
+  /** 데모(프로젝트 없음) 화면이면 전환 메뉴 대신 이름만 */
+  demo?: boolean
 }
 
-export default function Sidebar({ open, onToggle, projectTitle, scenes, activeSeq, onSelectScene, nav, onSelectNav, onDiagnostics, diagActive }: Props) {
+export default function Sidebar({ open, onToggle, projectTitle, scenes, activeSeq, onSelectScene, nav, onSelectNav, onDiagnostics, diagActive, demo }: Props) {
   // 에피소드별로 묶는다
   const eps = [...new Set(scenes.map((s) => s.ep))].sort()
 
@@ -45,9 +48,12 @@ export default function Sidebar({ open, onToggle, projectTitle, scenes, activeSe
       </div>
 
       <div className="no-drag flex min-h-0 flex-1 flex-col">
-        <section className="min-h-0 overflow-y-auto px-2">
+        {/* 전환 메뉴는 스크롤 영역 밖 — 안에 두면 드롭다운이 잘린다 */}
+        <div className="px-2">
           {open && <div className="px-2 pb-1 text-[11px] font-semibold tracking-wide text-muted">프로젝트</div>}
-          <TreeRow icon={Folder} label={projectTitle} open={open} depth={0} />
+          {demo ? <TreeRow icon={Folder} label={projectTitle} open={open} depth={0} /> : <ProjectSwitcher open={open} title={projectTitle} />}
+        </div>
+        <section className="min-h-0 overflow-y-auto px-2">
           {eps.map((ep) => (
             <div key={ep}>
               <TreeRow icon={Folder} label={ep} open={open} depth={1} />

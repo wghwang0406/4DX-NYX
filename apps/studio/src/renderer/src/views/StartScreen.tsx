@@ -8,11 +8,17 @@ export default function StartScreen() {
   const [recent, setRecent] = useState<Array<{ root: string; title: string; code: string; openedAt: number }>>([])
   const [title, setTitle] = useState('')
   const [code, setCode] = useState('')
-  const [showCreate, setShowCreate] = useState(false)
+  // "새 프로젝트…" 로 왔으면 만들기 칸을 펼친 채로
+  const [showCreate, setShowCreate] = useState(() => {
+    const v = sessionStorage.getItem('nyx_new_project') === '1'
+    sessionStorage.removeItem('nyx_new_project')
+    return v
+  })
   const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
     void window.conti.api.project.recent().then(setRecent)
+    return window.conti.onMenu((a) => a === 'new-project' && setShowCreate(true))
   }, [])
 
   const codeOk = /^[A-Z][A-Z0-9_]{1,15}$/.test(code)

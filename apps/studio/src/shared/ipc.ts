@@ -46,6 +46,9 @@ export interface Api {
     openPath(root: string): Promise<{ root: string; project: Project }>
     current(): Promise<{ root: string; project: Project } | null>
     recent(): Promise<Array<{ root: string; title: string; code: string; openedAt: number }>>
+    close(): Promise<void>
+    busy(): Promise<{ jobs: number }>
+    forgetRecent(root: string): Promise<Array<{ root: string; title: string; code: string; openedAt: number }>>
   }
   sequence: {
     list(): Promise<Sequence[]>
