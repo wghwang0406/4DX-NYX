@@ -74,5 +74,8 @@ export const demoScenes: Scene[] = [
   },
 ]
 
-export const navItems = ['소스', '에셋', '샷 분해', '콘티', '레이아웃', '게시'] as const
+export const navItems = ['Sources', 'Assets', 'Shots', 'Conti', 'Conti Export', 'Publish'] as const
+
+/** 예전 이름(주소·저장값)을 새 이름으로 */
+export const legacyNav: Record<string, (typeof navItems)[number]> = { 소스: 'Sources', 에셋: 'Assets', '샷 분해': 'Shots', 콘티: 'Conti', 레이아웃: 'Conti Export', 게시: 'Publish' }
 export type NavItem = (typeof navItems)[number]

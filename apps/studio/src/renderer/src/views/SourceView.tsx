@@ -45,7 +45,7 @@ export default function SourceView() {
       setPreview(null)
       if (made[0]) {
         setSeq(made[0].seq)
-        setNav('샷 분해')
+        setNav('Shots')
       }
     } catch (e) {
       setErr((e as Error).message)

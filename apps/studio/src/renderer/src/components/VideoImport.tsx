@@ -198,7 +198,7 @@ export default function VideoImport({ onClose }: { onClose: () => void }) {
               <button
                 onClick={() => {
                   setSeq(result.seq)
-                  setNav('콘티')
+                  setNav('Conti')
                 }}
                 className="mt-2 rounded-md bg-accent px-3 py-1 text-[12px] font-medium text-white"
               >

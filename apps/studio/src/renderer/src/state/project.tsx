@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { Project, Sequence } from '@conti/domain'
-import type { NavItem } from '../data/sampleScene'
+import { legacyNav, navItems, type NavItem } from '../data/sampleScene'
 
 interface ProjectState {
   root: string | null
@@ -32,7 +32,10 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [project, setProject] = useState<Project | null>(null)
   const [sequences, setSequences] = useState<Sequence[]>([])
   const [seq, setSeqRaw] = useState<string | null>(null)
-  const [nav, setNav] = useState<NavItem>(() => (new URLSearchParams(window.location.search).get('nav') as NavItem) || '콘티')
+  const [nav, setNav] = useState<NavItem>(() => {
+    const q = new URLSearchParams(window.location.search).get('nav') ?? ''
+    return (navItems as readonly string[]).includes(q) ? (q as NavItem) : (legacyNav[q] ?? 'Conti')
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

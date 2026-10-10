@@ -172,9 +172,9 @@ function Shell() {
   if (!root && !demoMode()) return <StartScreen />
 
   const workArea =
-    nav === '콘티' || nav === '샷 분해' ? (
+    nav === 'Conti' || nav === 'Shots' ? (
       <div className={`grid min-h-0 flex-1 gap-3 p-3 pt-0 ${sequence && selectedShot ? 'grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
-        {nav === '샷 분해' && sequence ? (
+        {nav === 'Shots' && sequence ? (
           <div className="grid min-h-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
             <ShotTable sequence={sequence} selectedShot={selectedShot} onSelect={selectShot} />
             <LayoutPreview seq={sequence.seq} mode="single" selectedShot={selectedShot} onSelect={selectShot} />
@@ -188,12 +188,12 @@ function Shell() {
         {sequence && selectedShot && <VersionsBar sequence={sequence} selectedShot={selectedShot} />}
         <Timeline scene={scene!} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={sequence ? changeDuration : undefined} />
       </div>
-    ) : nav === '레이아웃' && sequence ? (
+    ) : nav === 'Conti Export' && sequence ? (
       <LayoutView selectedShot={selectedShot} onSelect={selectShot} />
-    ) : nav === '게시' && sequence ? (
+    ) : nav === 'Publish' && sequence ? (
       <PublishView
         onGoShot={(no) => {
-          setNav('콘티')
+          setNav('Conti')
           setTimeout(() => selectShot(no), 0)
         }}
         onOpenSettings={() => setShowDiag(true)}
@@ -224,7 +224,7 @@ function Shell() {
       <main className="flex min-w-0 flex-1 flex-col">
         <Header scene={scene} scenes={scenes} onSwitch={setSeq} projectTitle={project?.title ?? '데모'} />
         {!demo && <MdPendingBar />}
-        {showDiag ? <SettingsView /> : nav === '소스' ? <SourceView /> : nav === '에셋' && !demo ? <AssetsView /> : !scene ? <EmptyState /> : workArea}
+        {showDiag ? <SettingsView /> : nav === 'Sources' ? <SourceView /> : nav === 'Assets' && !demo ? <AssetsView /> : !scene ? <EmptyState /> : workArea}
       </main>
 
       {/* 프로젝트가 바뀌면 채팅 패널을 새로 (스레드는 프로젝트마다 따로 저장된다) */}
@@ -244,9 +244,9 @@ function EmptyState() {
     <div className="flex flex-1 items-center justify-center p-6">
       <div className="rounded-lg border border-dashed border-line p-8 text-center">
         <div className="text-[14px] font-medium">아직 시퀀스가 없습니다</div>
-        <div className="mt-1 text-[12px] text-muted">소스에서 시나리오를 가져오면 씬이 시퀀스로 만들어집니다.</div>
-        <button onClick={() => setNav('소스')} className="mt-4 rounded-md bg-accent px-4 py-1.5 text-[12.5px] font-medium text-white">
-          소스로 가기
+        <div className="mt-1 text-[12px] text-muted">Sources 에서 시나리오나 영상을 가져오면 씬이 시퀀스로 만들어집니다.</div>
+        <button onClick={() => setNav('Sources')} className="mt-4 rounded-md bg-accent px-4 py-1.5 text-[12.5px] font-medium text-white">
+          Sources 로 가기
         </button>
       </div>
     </div>

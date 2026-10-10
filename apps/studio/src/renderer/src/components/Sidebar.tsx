@@ -4,12 +4,12 @@ import { navItems } from '../data/sampleScene'
 import ProjectSwitcher from './ProjectSwitcher'
 
 const navIcons: Record<NavItem, typeof Film> = {
-  소스: Film,
-  에셋: Box,
-  '샷 분해': ListTree,
-  콘티: LayoutGrid,
-  레이아웃: Layers,
-  게시: Send,
+  Sources: Film,
+  Assets: Box,
+  Shots: ListTree,
+  Conti: LayoutGrid,
+  'Conti Export': Layers,
+  Publish: Send,
 }
 
 interface Props {
