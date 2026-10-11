@@ -26,7 +26,7 @@ export interface ThreadInfo {
   lastActiveAt: number
 }
 
-export type SpendKindView = 'conti_generate' | 'assets_generate' | 'image_edit' | 'panel_restyle'
+export type SpendKindView = 'conti_generate' | 'assets_generate' | 'image_edit' | 'panel_restyle' | 'image_generate'
 
 /** 작업 한 건의 화면용 요약 (JobService JobRecord 에서 뽑음) */
 export interface JobView {

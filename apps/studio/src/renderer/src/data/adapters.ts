@@ -8,10 +8,20 @@ export function fileUrl(rel: string): string {
   return `conti-file://project/${rel.split('/').map(encodeURIComponent).join('/')}`
 }
 
+type StageShot = {
+  panels: Array<{ versions: { conti: Array<{ id: string; n: number; file: string }>; image?: Array<{ id: string; n: number; file: string }> } }>
+  stages: { conti: { currentVersionId?: string }; image?: { currentVersionId?: string } }
+}
+
 /** 샷의 현재 콘티 이미지 상대경로 */
-export function currentContiFile(s: { panels: Array<{ versions: { conti: Array<{ id: string; n: number; file: string }> } }>; stages: { conti: { currentVersionId?: string } } }): string | undefined {
-  const all = s.panels.flatMap((p) => p.versions.conti)
-  const id = s.stages.conti.currentVersionId
+export function currentContiFile(s: StageShot): string | undefined {
+  return currentStageFile(s, 'conti')
+}
+
+/** 샷의 현재 단계 그림 (콘티 / 콘티 기반 최종 이미지) */
+export function currentStageFile(s: StageShot, stage: 'conti' | 'image'): string | undefined {
+  const all = s.panels.flatMap((p) => (stage === 'image' ? (p.versions.image ?? []) : p.versions.conti))
+  const id = stage === 'image' ? s.stages.image?.currentVersionId : s.stages.conti.currentVersionId
   const v = (id && all.find((x) => x.id === id)) || [...all].sort((a, b) => b.n - a.n)[0]
   return v?.file
 }
@@ -24,7 +34,7 @@ const REVIEW_LABEL: Record<string, string> = {
 }
 
 /** 도메인 Sequence → 타임라인 뷰 모델. 타임코드가 없으면(텍스트 입력) 길이를 추정해 이어 붙인다. */
-export function sequenceToScene(seq: Sequence, projectTitle: string): Scene {
+export function sequenceToScene(seq: Sequence, projectTitle: string, stage: 'conti' | 'image' = 'conti'): Scene {
   let t = 0
   let estimated = false
   const shots: Shot[] = []
@@ -53,12 +63,12 @@ export function sequenceToScene(seq: Sequence, projectTitle: string): Scene {
       tOut,
       caption,
       review: s.review[0] ? { flag: s.review[0], label: REVIEW_LABEL[s.review[0]] ?? '확인' } : undefined,
-      stale: s.stages.conti.status === 'stale',
+      stale: s.stages[stage].status === 'stale',
       image: (() => {
-        const f = currentContiFile(s)
+        const f = currentStageFile(s, stage)
         return f ? fileUrl(f) : undefined
       })(),
-      status: s.stages.conti.status,
+      status: s.stages[stage].status,
     })
     s.dialogue.forEach((d, i) => {
       const span = tOut - tIn

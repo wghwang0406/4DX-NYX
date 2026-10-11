@@ -370,7 +370,7 @@ export class JobService {
     const version = Version.parse({
       id: randomUUID(),
       n,
-      stage: j.target.type === 'shot' ? 'conti' : 'image',
+      stage: j.target.type === 'shot' && j.target.stage !== 'image' ? 'conti' : 'image',
       file: rel,
       sha256: img.sha256,
       w: img.w,
@@ -425,9 +425,11 @@ export class JobService {
     const ext = extOf(url)
     if (j.target.type === 'shot') {
       const t = j.target
+      const stage = t.stage === 'image' ? 'image' : 'conti'
       const shot = this.o.store.getSequence(t.seq)?.shots.find((s) => s.id === t.shotId)
-      const recorded = Math.max(0, ...(shot?.panels.flatMap((p) => p.versions.conti.map((v) => v.n)) ?? []))
-      const dir = PROJECT_DIRS.conti(t.ep, t.seq)
+      const recorded = Math.max(0, ...(shot?.panels.flatMap((p) => p.versions[stage].map((v) => v.n)) ?? []))
+      // 이미지 단계는 {EP}/Image/{SEQ}/ (기존 GenConti2Img 와 같은 자리), 콘티는 {EP}/Conti/{SEQ}/
+      const dir = stage === 'image' ? PROJECT_DIRS.image(t.ep, t.seq) : PROJECT_DIRS.conti(t.ep, t.seq)
       const n = await nextFree(absPath(this.root, dir), recorded + 1, (v) => shotFileName({ seq: t.seq, shot: t.shotNo, v, ext }))
       return { rel: `${dir}/${shotFileName({ seq: t.seq, shot: t.shotNo, v: n, ext })}`, n }
     }
@@ -448,8 +450,11 @@ export class JobService {
       const shot = seq?.shots.find((s) => s.id === t.shotId)
       if (!seq || !shot) throw new Error(`샷이 사라졌습니다: ${t.seq} ${t.shotNo} (파일은 ${version.file})`)
       const panels = shot.panels.length ? shot.panels.map((p) => ({ ...p })) : [{ id: randomUUID(), index: 0, annotations: [], versions: { conti: [], image: [] } }]
-      panels[0] = { ...panels[0], versions: { ...panels[0].versions, conti: [...panels[0].versions.conti, version] } }
-      const stages: Shot['stages'] = { ...shot.stages, conti: { ...shot.stages.conti, status: 'review', currentVersionId: version.id, inputHash: j.inputHash, lastJobId: j.id, updatedAt: Date.now() } }
+      const stage = t.stage === 'image' ? 'image' : 'conti'
+      panels[0] = { ...panels[0], versions: { ...panels[0].versions, [stage]: [...panels[0].versions[stage], version] } }
+      const stages: Shot['stages'] = { ...shot.stages, [stage]: { ...shot.stages[stage], status: 'review', currentVersionId: version.id, inputHash: j.inputHash, lastJobId: j.id, updatedAt: Date.now() } }
+      // 콘티가 새로 바뀌었는데 그 콘티로 만든 이미지가 이미 있으면, 이미지는 재생성 필요
+      if (stage === 'conti' && shot.stages.image.currentVersionId) stages.image = { ...shot.stages.image, status: 'stale', updatedAt: Date.now() }
       await this.o.store.updateShot(t.seq, t.shotId, { panels, stages })
       return
     }
@@ -465,8 +470,9 @@ export class JobService {
     const seq = this.o.store.getSequence(t.seq)
     const shot = seq?.shots.find((s) => s.id === t.shotId)
     if (!seq || !shot) return
-    if (shot.stages.conti.status === status) return
-    await this.o.store.updateShot(t.seq, t.shotId, { stages: { ...shot.stages, conti: { ...shot.stages.conti, status, lastJobId: j.id, updatedAt: Date.now() } } })
+    const stage = t.stage === 'image' ? 'image' : 'conti'
+    if (shot.stages[stage].status === status) return
+    await this.o.store.updateShot(t.seq, t.shotId, { stages: { ...shot.stages, [stage]: { ...shot.stages[stage], status, lastJobId: j.id, updatedAt: Date.now() } } })
   }
 }
 

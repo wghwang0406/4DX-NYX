@@ -470,6 +470,72 @@ describe('JobService (fake CLI, zero credits)', () => {
   })
 })
 
+describe('image stage (콘티 → 최종 이미지)', () => {
+  async function addConti(store: ProjectStore, no: string, n = 1) {
+    const seq = store.getSequence('S41')!
+    const shot = seq.shots.find((x) => x.no === no)!
+    const rel = `EP01/Conti/S41/S41_${no}_v${n}.png`
+    await mkdir(join(store.root, 'EP01/Conti/S41'), { recursive: true })
+    await writeFile(join(store.root, rel), PNG)
+    const v = { id: `cv-${no}-${n}`, n, stage: 'conti' as const, file: rel, source: 'generated' as const, createdAt: 1 }
+    const panels = [{ id: `p-${no}`, index: 0, annotations: [], versions: { conti: [...(shot.panels[0]?.versions.conti ?? []), v], image: [] } }]
+    await store.updateShot('S41', shot.id, { panels, stages: { ...shot.stages, conti: { ...shot.stages.conti, status: 'review', currentVersionId: v.id } } } as never)
+    return v
+  }
+
+  it('plans: needs conti, ref 1 = current conti, asset refs numbered from 2, final look style', async () => {
+    const { store } = await makeProject('img-plan')
+    await addView(store, 'EP01', 'c1', 'face', 'EP01/character/char/해수_Character_face_v1.png')
+    await expect(planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030'] }, 'approved')).rejects.toThrow(/콘티 이미지가 없습니다: 0030/)
+    const cv = await addConti(store, '0030')
+    const r = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030'] }, 'approved')
+    const p = r.plans[0]
+    expect(p.model).toBe('gpt_image_2_5')
+    expect(p.target).toMatchObject({ type: 'shot', shotNo: '0030', stage: 'image' })
+    expect(p.refs[0]).toEqual({ file: cv.file, label: '0030 콘티 v1' })
+    expect(p.refs[1].label).toBe('@해수 face')
+    expect(p.parentVersionId).toBe(cv.id)
+    expect(p.prompt.split('\n')[0]).toMatch(/^Reference image 1 is the approved storyboard frame/)
+    expect(p.prompt).toContain('clean 3D CG animated film look')
+    expect(p.prompt).toContain('reference image 2')
+    expect(p.prompt).not.toMatch(/reference image 1 \(100%/)
+    // GPT 엔진 · 파일럿
+    await addConti(store, '0040')
+    const cx = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030', '0040'], engine: 'codex' }, 'pilot')
+    expect(cx.plans).toHaveLength(1)
+    expect(cx.plans[0]).toMatchObject({ engine: 'codex', model: CODEX_IMAGE_MODEL })
+    expect(cx.rest).toEqual({ args: { seq: 'S41', shots: ['0040'], pilot: false, engine: 'codex' }, count: 1 })
+  })
+
+  it('JobService writes EP/Image/SEQ and stages.image, keeps conti; new conti marks image stale', async () => {
+    const { root, store } = await makeProject('img-jobs')
+    await addConti(store, '0030')
+    const fakeDir = await mkdtemp(join(tmpdir(), 'fakehf-'))
+    const cli = new RealHiggsfieldCli({ bin: await fakeBin(fakeDir), env: { ...process.env, FAKE_HF_DIR: fakeDir, FAKE_HF_URL: httpUrl } })
+    const svc = new JobService({ store, cli, pollMs: 30 })
+    await svc.init()
+    const r = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030'] }, 'approved')
+    await svc.submit('req-img', r.plans)
+    const w = await svc.waitRequest('req-img', 15_000)
+    expect(w.jobs[0].status).toBe('done')
+    expect(w.jobs[0].outFile).toBe('EP01/Image/S41/S41_0030_v1.png')
+    expect((await readdir(join(root, 'EP01', 'Image', 'S41')))).toContain('S41_0030_v1.png')
+    let shot = store.getSequence('S41')!.shots.find((x) => x.no === '0030')!
+    expect(shot.panels[0].versions.image).toHaveLength(1)
+    expect(shot.panels[0].versions.image[0]).toMatchObject({ stage: 'image', n: 1, parentId: 'cv-0030-1' })
+    expect(shot.stages.image).toMatchObject({ status: 'review', currentVersionId: shot.panels[0].versions.image[0].id })
+    expect(shot.panels[0].versions.conti).toHaveLength(1)
+    expect(shot.stages.conti.currentVersionId).toBe('cv-0030-1')
+    // 콘티를 다시 그리면 이미지는 재생성 필요
+    const rc = await planRequest({ store, models }, 'conti_generate', { seq: 'S41', shots: ['0030'], style: 'sketch' }, 'approved')
+    await svc.submit('req-c2', rc.plans)
+    await svc.waitRequest('req-c2', 15_000)
+    shot = store.getSequence('S41')!.shots.find((x) => x.no === '0030')!
+    expect(shot.panels[0].versions.conti.map((v) => v.n)).toEqual([1, 2])
+    expect(shot.stages.image.status).toBe('stale')
+  })
+})
+
 describe('GPT (Codex) engine', () => {
   async function codexBin(dir: string) {
     const sh = join(dir, 'codex')

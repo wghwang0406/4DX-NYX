@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import Player from './components/Player'
 import ShotDetail from './components/ShotDetail'
+import ShotPreview from './components/ShotPreview'
 import SheetPreview from './components/SheetPreview'
 import LayoutPreview from './components/LayoutPreview'
 import Timeline from './components/Timeline'
@@ -72,6 +73,9 @@ function Shell() {
   const [playing, setPlaying] = useState(false)
   // Conti 왼쪽 위: 컷 상세(기본) / 원본 영상(영상 입력 시퀀스만). 애니매틱 재생은 Conti Export 로 옮겼다.
   const [contiTab, setContiTab] = useState<'detail' | 'video'>('detail')
+  // Shots 단계 탭: 콘티 / 콘티 기반 이미지 (이미지 탭에서만 아래 타임라인)
+  const [shotsTab, setShotsTab] = useState<'conti' | 'image'>(() => (new URLSearchParams(window.location.search).get('stage') === 'image' ? 'image' : 'conti'))
+  const imageScene = useMemo(() => (sequence && shotsTab === 'image' ? sequenceToScene(sequence, project?.title ?? '', 'image') : null), [sequence, shotsTab, project])
   const videoTab = !!scene?.video && contiTab === 'video' && nav === 'Conti'
 
   useEffect(() => {
@@ -152,7 +156,7 @@ function Shell() {
   // Conti 에서 아무 컷도 안 골랐으면 첫 컷을 고른다 (컷 상세가 비지 않게). 위의 씬 전환 초기화보다 뒤에 둔다.
   const firstShot = scene?.shots[0]?.no
   useEffect(() => {
-    if (nav === 'Conti' && !selectedShot && firstShot) selectShot(firstShot)
+    if ((nav === 'Conti' || nav === 'Shots') && !selectedShot && firstShot) selectShot(firstShot)
   }, [nav, selectedShot, firstShot, selectShot])
 
   const changeDuration = useCallback(
@@ -165,7 +169,18 @@ function Shell() {
   if (!root && !demoMode()) return <StartScreen />
 
   const workArea =
-    nav === 'Conti' || nav === 'Shots' ? (
+    nav === 'Shots' && sequence ? (
+      <div className={`grid min-h-0 flex-1 gap-3 p-3 pt-0 ${shotsTab === 'image' ? 'grid-rows-[minmax(0,2fr)_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)]'}`}>
+        <div className="grid min-h-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
+          <ShotTable sequence={sequence} selectedShot={selectedShot} onSelect={selectShot} stage={shotsTab} onStageChange={setShotsTab} />
+          <div className="grid min-h-0 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
+            <ShotPreview sequence={sequence} selectedShot={selectedShot} stage={shotsTab} />
+            <LayoutPreview seq={sequence.seq} mode="single" selectedShot={selectedShot} onSelect={selectShot} />
+          </div>
+        </div>
+        {shotsTab === 'image' && imageScene && <Timeline scene={imageScene} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={changeDuration} />}
+      </div>
+    ) : nav === 'Conti' || nav === 'Shots' ? (
       <div className={`grid min-h-0 flex-1 gap-3 p-3 pt-0 ${sequence && selectedShot ? 'grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
         {nav === 'Shots' && sequence ? (
           <div className="grid min-h-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">

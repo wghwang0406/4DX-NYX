@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-export type SpendKind = 'conti_generate' | 'assets_generate' | 'image_edit' | 'panel_restyle'
+export type SpendKind = 'conti_generate' | 'assets_generate' | 'image_edit' | 'panel_restyle' | 'image_generate'
 export type SpendStatus = 'awaiting_approval' | 'approved' | 'rejected' | 'pilot'
 export type SpendDecision = Exclude<SpendStatus, 'awaiting_approval'>
 

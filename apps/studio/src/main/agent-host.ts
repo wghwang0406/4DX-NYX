@@ -363,7 +363,7 @@ export class AgentHost {
 
   /** 카드에 보일 장수 — MCP 도구와 같은 규칙 (에셋은 종류별 뷰 수) */
   private async countFor(kind: SpendKind, args: Record<string, unknown>): Promise<number> {
-    if (kind === 'conti_generate') return args.pilot ? 1 : ((args.shots as string[] | undefined)?.length ?? 0)
+    if (kind === 'conti_generate' || kind === 'image_generate') return args.pilot ? 1 : ((args.shots as string[] | undefined)?.length ?? 0)
     if (kind === 'panel_restyle') return (args.shotNos as string[] | undefined)?.length ?? 0
     if (kind === 'image_edit') return 1
     const ea = await this.store.listAssets(String(args.ep))

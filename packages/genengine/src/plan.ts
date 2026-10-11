@@ -6,9 +6,10 @@ import { ROUTE, type ModelTable } from './models'
 import { buildContiPrompt, styleLineFor } from './prompts/conti'
 import { charPlatePrompt, charSheetPrompt, locMasterPrompt, locViewPrompt, propPrompt } from './prompts/assets'
 import { restylePrompt, surgicalEditPrompt } from './prompts/edit'
+import { buildShotImagePrompt } from './prompts/image'
 import { currentContiVersion, latestView, pickShotRefs } from './refs'
 
-export type SpendKind = 'conti_generate' | 'assets_generate' | 'image_edit' | 'panel_restyle'
+export type SpendKind = 'conti_generate' | 'assets_generate' | 'image_edit' | 'panel_restyle' | 'image_generate'
 
 export interface ShotTarget {
   type: 'shot'
@@ -16,6 +17,8 @@ export interface ShotTarget {
   seq: string
   shotId: string
   shotNo: string
+  /** 'image' = 콘티 기반 최종 이미지 단계 (없으면 콘티) */
+  stage?: 'conti' | 'image'
 }
 export interface AssetTarget {
   type: 'asset'
@@ -132,6 +135,8 @@ async function planByKind(ctx: PlanContext, kind: SpendKind, args: Record<string
       return planEdit(ctx, args as { seq: string; shotNo: string; instructionEn: string; model?: string })
     case 'panel_restyle':
       return planRestyle(ctx, args as { seq: string; shotNos: string[] })
+    case 'image_generate':
+      return planImage(ctx, args as { seq: string; shots: string[]; pilot?: boolean }, decision, opts)
   }
 }
 
@@ -167,6 +172,47 @@ async function planConti(ctx: PlanContext, a: { seq: string; shots: string[]; st
       style: a.style,
     })
   }
+  return { plans, rest, notes }
+}
+
+/** 콘티 → 최종 이미지. 콘티(현재 버전)가 있는 샷만, 레퍼런스 1 = 그 콘티, 나머지 = 샷사이즈별 에셋 시트 뷰. */
+async function planImage(ctx: PlanContext, a: { seq: string; shots: string[]; pilot?: boolean }, decision: 'approved' | 'pilot', opts: PlanOptions): Promise<PlanResult> {
+  const project = ctx.store.getProject()
+  const seq = requireSeq(ctx.store, a.seq)
+  const assets = (await ctx.store.listAssets(seq.ep)).assets
+  const notes: string[] = []
+  let nos = opts.includeNeighbors ? expandNeighbors(seq, a.shots) : a.shots
+  if (opts.includeNeighbors && nos.length !== a.shots.length) notes.push(`앞뒤 컷 포함: ${nos.length - a.shots.length}장 추가`)
+  const noConti = nos.filter((no) => {
+    const shot = liveShots(seq).find((s) => s.no === no)
+    return !shot || !currentContiVersion(shot)
+  })
+  if (noConti.length) throw new PlanError(`콘티 이미지가 없습니다: ${noConti.join(', ')} — 먼저 콘티를 만드세요`)
+  const pilot = decision === 'pilot' || !!a.pilot
+  let rest: PlanResult['rest']
+  if (pilot && nos.length > 1) {
+    rest = { args: { seq: a.seq, shots: nos.slice(1), pilot: false }, count: nos.length - 1 }
+    nos = nos.slice(0, 1)
+  }
+  const model = ROUTE.image
+  const plans: JobPlan[] = nos.map((no) => {
+    const shot = liveShots(seq).find((s) => s.no === no)!
+    const conti = currentContiVersion(shot)!
+    const refs = pickShotRefs(shot, assets, ctx.models.maxImages(model) - 1)
+    const built = buildShotImagePrompt({ project, sequence: seq, shot, assets, refs })
+    return {
+      kind: 'image_generate',
+      target: { type: 'shot', ep: seq.ep, seq: seq.seq, shotId: shot.id, shotNo: shot.no, stage: 'image' },
+      model,
+      params: imageParams(ctx.models, model, project),
+      prompt: built.text,
+      refs: [{ file: conti.file, label: `${shot.no} 콘티 v${conti.n}` }, ...refs.map((r) => ({ file: r.file, label: `${r.tag} ${r.view}` }))],
+      source: 'generated',
+      parentVersionId: conti.id,
+      lint: built.warnings,
+      style: 'cinematic',
+    }
+  })
   return { plans, rest, notes }
 }
 

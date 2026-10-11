@@ -25,7 +25,7 @@ const api: Api = {
     list: () => invoke('sequence:list'),
     get: (seq) => invoke('sequence:get', seq),
     updateShot: (seq, shotId, patch) => invoke('sequence:updateShot', seq, shotId, patch),
-    setCurrentVersion: (seq, shotId, versionId) => invoke('sequence:setCurrentVersion', seq, shotId, versionId),
+    setCurrentVersion: (seq, shotId, versionId, stage) => invoke('sequence:setCurrentVersion', seq, shotId, versionId, stage),
     setAnnotations: (seq, shotId, panelIndex, annotations) => invoke('sequence:setAnnotations', seq, shotId, panelIndex, annotations),
   },
   screenplay: {

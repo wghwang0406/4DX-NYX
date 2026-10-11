@@ -168,12 +168,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
   ipcMain.handle('sequence:list', () => requireStore().listSequences())
   ipcMain.handle('sequence:get', (_e, seq: string) => requireStore().getSequence(seq) ?? null)
   ipcMain.handle('sequence:updateShot', (_e, seq: string, shotId: string, patch) => requireStore().updateShot(seq, shotId, patch))
-  ipcMain.handle('sequence:setCurrentVersion', (_e, seq: string, shotId: string, versionId: string) => {
+  ipcMain.handle('sequence:setCurrentVersion', (_e, seq: string, shotId: string, versionId: string, stage: 'conti' | 'image' = 'conti') => {
     const s = requireStore()
-    const shot = s.getSequence(seq)?.shots.find((x) => x.id === shotId)
+    const q = s.getSequence(seq)
+    const shot = q?.shots.find((x) => x.id === shotId)
     if (!shot) throw new Error('샷이 없습니다')
-    if (!shot.panels.some((p) => p.versions.conti.some((v) => v.id === versionId))) throw new Error('버전이 없습니다')
-    return s.updateShot(seq, shotId, { stages: { ...shot.stages, conti: { ...shot.stages.conti, currentVersionId: versionId, status: 'review', updatedAt: Date.now() } } })
+    const st = stage === 'image' ? 'image' : 'conti'
+    if (!shot.panels.some((p) => p.versions[st].some((v) => v.id === versionId))) throw new Error('버전이 없습니다')
+    return s.updateShot(seq, shotId, { stages: { ...shot.stages, [st]: { ...shot.stages[st], currentVersionId: versionId, status: 'review', updatedAt: Date.now() } } })
   })
 
   ipcMain.handle('screenplay:importDialog', async (): Promise<ImportPreview | null> => {
@@ -451,14 +453,32 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
         }
         return jobs
       }
-      const dump = () => requireStore().getSequence(seq)!.shots.filter((x) => !x.deleted).slice(0, Math.max(n, 3)).map((x) => ({ no: x.no, stages: x.stages.conti, versions: x.panels.flatMap((p) => p.versions.conti) }))
+      const dump = () => requireStore().getSequence(seq)!.shots.filter((x) => !x.deleted).slice(0, Math.max(n, 3)).map((x) => ({ no: x.no, stages: x.stages.conti, versions: x.panels.flatMap((p) => p.versions.conti), image: x.stages.image, imageVersions: x.panels.flatMap((p) => p.versions.image) }))
       // n=0: 요청을 만들지 않고 복구된 작업이 끝나기만 기다린다 (크래시 복구 검증)
       if (n === 0) return { recovered: true, jobs: await waitAll(), shots: dump() }
       const shots = s.shots.filter((x) => !x.deleted).slice(0, n).map((x) => x.no)
-      const req =
-        process.env.CONTI_E2E_KIND === 'assets'
-          ? await h.requestSpend('assets_generate', { ep: s.ep, ids: (await requireStore().listAssets(s.ep)).assets.slice(0, n).map((a) => a.id) })
-          : await h.requestSpend('conti_generate', { seq, shots, style: 'sketch' })
+      const kind = process.env.CONTI_E2E_KIND
+      let req: { requestId: string }
+      if (kind === 'image' && process.env.CONTI_E2E_CARD) {
+        // UI 로: Shots › 이미지 탭의 [이 컷 이미지 생성] 을 실제로 누른다
+        const win = getWindow()!
+        const before = new Set(h.spendList().map((r) => r.requestId))
+        for (let i = 0; i < 40 && !(await win.webContents.executeJavaScript(`!!document.querySelector('[data-testid=shot-image-generate]:not([disabled])')`)); i++) await new Promise((r) => setTimeout(r, 250))
+        await win.webContents.executeJavaScript(`document.querySelector('[data-testid=shot-image-generate]').click()`)
+        let found: { requestId: string } | undefined
+        for (let i = 0; i < 40 && !found; i++) {
+          await new Promise((r) => setTimeout(r, 250))
+          found = h.spendList().find((r) => !before.has(r.requestId))
+        }
+        if (!found) throw new Error('이미지 생성 요청이 만들어지지 않았습니다')
+        req = found
+      } else
+        req =
+          kind === 'assets'
+            ? await h.requestSpend('assets_generate', { ep: s.ep, ids: (await requireStore().listAssets(s.ep)).assets.slice(0, n).map((a) => a.id) })
+            : kind === 'image'
+              ? await h.requestSpend('image_generate', { seq, shots })
+              : await h.requestSpend('conti_generate', { seq, shots, style: 'sketch' })
       const engine = (process.env.CONTI_E2E_ENGINE as 'higgsfield' | 'codex' | undefined) || undefined
       // CONTI_E2E_CARD=1: 승인 카드 UI 에서 엔진 버튼·승인을 실제로 누른다
       if (process.env.CONTI_E2E_CARD) {

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Images, RefreshCw, Brush } from 'lucide-react'
+import { Fragment, useState } from 'react'
+import { Images, RefreshCw, Brush, Sparkles } from 'lucide-react'
 import type { Sequence, Shot, ShotSize } from '@conti/domain'
 import { useProject } from '../state/project'
 
@@ -21,10 +21,13 @@ interface Props {
   /** 샷 번호(0010…) — 시트 미리보기·타임라인·채팅 컨텍스트와 같은 키 */
   selectedShot: string | null
   onSelect: (no: string) => void
+  /** 단계 탭: 콘티 / 콘티 기반 이미지 */
+  stage?: 'conti' | 'image'
+  onStageChange?: (s: 'conti' | 'image') => void
 }
 
 /** 샷 분해 단계의 표 보기(B안). 셀을 고치면 바로 저장되고 shotlist md 가 다시 생성된다. */
-export default function ShotTable({ sequence, selectedShot, onSelect }: Props) {
+export default function ShotTable({ sequence, selectedShot, onSelect, stage = 'conti', onStageChange }: Props) {
   const { project } = useProject()
   const [editing, setEditing] = useState<{ id: string; field: 'actionKo' } | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -37,6 +40,19 @@ export default function ShotTable({ sequence, selectedShot, onSelect }: Props) {
     const cur = all.find((v) => v.id === s.stages.conti.currentVersionId)
     return cur?.source === 'video_frame'
   })
+
+  // 이미지 탭: 콘티가 있고 이미지가 없거나 재생성 필요한 컷만
+  const withConti = shots.filter((s) => !!s.stages.conti.currentVersionId)
+  const imageNeeds = withConti.filter((s) => ['none', 'stale', 'failed'].includes(s.stages.image.status))
+
+  async function requestImages(nos: string[]) {
+    setErr(null)
+    try {
+      await window.conti.agent.requestSpend('image_generate', { seq: sequence.seq, shots: nos })
+    } catch (e) {
+      setErr((e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''))
+    }
+  }
 
   async function patch(shot: Shot, p: Partial<Shot>) {
     await window.conti.api.sequence.updateShot(sequence.seq, shot.id, p)
@@ -54,12 +70,40 @@ export default function ShotTable({ sequence, selectedShot, onSelect }: Props) {
   return (
     <section className="flex min-h-0 flex-col rounded-lg border border-line bg-panel">
       <div className="flex h-9 shrink-0 items-center justify-between px-3 text-[12.5px] font-medium">
-        <span>
-          샷 목록 <span className="ml-1 text-muted">{shots.length}개</span>
-          <span className="ml-2 text-[11px] text-muted">{sequence.breakdown.status === 'accepted' ? '분해 확정' : sequence.breakdown.status === 'draft' ? '초안' : '분해 전'}</span>
+        <span className="flex items-center gap-2">
+          <span>
+            샷 목록 <span className="ml-1 text-muted">{shots.length}개</span>
+            <span className="ml-2 text-[11px] text-muted">{sequence.breakdown.status === 'accepted' ? '분해 확정' : sequence.breakdown.status === 'draft' ? '초안' : '분해 전'}</span>
+          </span>
+          {onStageChange && (
+            <span className="ml-2 flex rounded-md border border-line p-0.5 text-[11.5px] font-normal" data-testid="stage-tabs">
+              {(
+                [
+                  ['conti', '콘티'],
+                  ['image', '이미지'],
+                ] as const
+              ).map(([k, label]) => (
+                <button key={k} data-stage={k} onClick={() => onStageChange(k)} className={`rounded px-2.5 py-0.5 ${stage === k ? 'bg-accent-soft text-ink' : 'text-muted hover:text-ink'}`}>
+                  {label}
+                </button>
+              ))}
+            </span>
+          )}
         </span>
         <span className="flex items-center gap-1.5">
           {err && <span className="text-[11px] text-red-300">{err}</span>}
+          {stage === 'image' ? (
+            <button
+              data-testid="images-needed"
+              disabled={!imageNeeds.length}
+              onClick={() => void requestImages(imageNeeds.map((s) => s.no))}
+              className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-[11.5px] font-medium text-white hover:brightness-110 disabled:opacity-40"
+              title="콘티가 있고 이미지가 없거나 재생성 필요한 컷만 (승인 카드에서 1장만 먼저 가능). 한 컷씩은 오른쪽 [이 컷 이미지 생성]"
+            >
+              <Sparkles size={12} /> 콘티 있는 컷 이미지 생성 {imageNeeds.length ? `(${imageNeeds.length})` : ''}
+            </button>
+          ) : (
+          <>
           {frames.length > 0 && (
             <button
               onClick={() => void window.conti.agent.requestSpend('panel_restyle', { seq: sequence.seq, shotNos: frames.map((s) => s.no) }).catch((e: Error) => setErr(e.message))}
@@ -85,6 +129,8 @@ export default function ShotTable({ sequence, selectedShot, onSelect }: Props) {
           >
             <Images size={12} /> 콘티 생성
           </button>
+          </>
+          )}
         </span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
@@ -97,14 +143,18 @@ export default function ShotTable({ sequence, selectedShot, onSelect }: Props) {
               <th className="w-20 px-2 py-1.5">장소</th>
               <th className="w-20 px-2 py-1.5">소품</th>
               <th className="px-2 py-1.5">묘사</th>
-              <th className="w-16 px-2 py-1.5 text-center">콘티</th>
+              <th className="w-16 px-2 py-1.5 text-center">{stage === 'image' ? '이미지' : '콘티'}</th>
             </tr>
           </thead>
           <tbody>
             {shots.map((s) => {
-              const st = STATUS[s.stages.conti.status] ?? STATUS.none
+              const stageStatus = s.stages[stage].status
+              const noConti = stage === 'image' && !s.stages.conti.currentVersionId
+              const st = noConti ? { icon: '–', label: '콘티 없음' } : (STATUS[stageStatus] ?? STATUS.none)
+              const open = selectedShot === s.no
               return (
-                <tr key={s.id} onClick={() => onSelect(s.no)} className={`cursor-pointer border-t border-line/60 ${selectedShot === s.no ? 'bg-accent-soft' : 'hover:bg-panel-2'}`}>
+                <Fragment key={s.id}>
+                <tr data-shot-row={s.no} onClick={() => onSelect(s.no)} className={`cursor-pointer border-t border-line/60 ${open ? 'bg-accent-soft' : 'hover:bg-panel-2'}`}>
                   <td className="px-3 py-1.5 font-mono">{s.no}</td>
                   <td className="px-2 py-1.5">
                     <select
@@ -163,11 +213,11 @@ export default function ShotTable({ sequence, selectedShot, onSelect }: Props) {
                   <td className="px-2 py-1.5 text-center" title={st.label}>
                     <span className="inline-flex items-center gap-1">
                       {st.icon}
-                      {(s.stages.conti.status === 'stale' || s.stages.conti.status === 'failed') && (
+                      {!noConti && (stageStatus === 'stale' || stageStatus === 'failed') && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            void request([s.no])
+                            void (stage === 'image' ? requestImages([s.no]) : request([s.no]))
                           }}
                           className="rounded border border-line px-1 text-[10px] text-muted hover:text-ink"
                           title="이 컷만 재생성"
@@ -178,11 +228,55 @@ export default function ShotTable({ sequence, selectedShot, onSelect }: Props) {
                     </span>
                   </td>
                 </tr>
+                {open && (
+                  <tr className="bg-accent-soft/40" data-testid="shot-detail-row">
+                    <td colSpan={7} className="px-3 pb-3 pt-1">
+                      <ShotFacts shot={s} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               )
             })}
           </tbody>
         </table>
       </div>
     </section>
+  )
+}
+
+/** 고른 샷의 묘사·대사·카메라 전체 (표 칸에서 잘리는 내용) */
+function ShotFacts({ shot }: { shot: Shot }) {
+  const tag = (t: string) => t.replace(/^@(loc_|prop_)?/, '')
+  const facts: Array<[string, string]> = [
+    ['샷', [shot.sizeCode, shot.angle, shot.cameraMove, shot.fovDeg ? `${shot.fovDeg}°` : '', shot.durationSec ? `${shot.durationSec}초` : ''].filter(Boolean).join(' · ')],
+    ['인물', shot.characters.map(tag).join(', ')],
+    ['장소', shot.location ? tag(shot.location) : ''],
+    ['소품', shot.props.map(tag).join(', ')],
+  ]
+  return (
+    <div className="space-y-1.5 rounded-md border border-line/70 bg-bg/70 p-2.5 text-[12px] leading-relaxed">
+      <div>
+        <span className="mr-2 text-[10.5px] text-muted">묘사</span>
+        <span className="whitespace-pre-wrap">{shot.actionKo || '—'}</span>
+      </div>
+      {shot.dialogue.map((d, i) => (
+        <div key={i}>
+          <span className="mr-2 rounded bg-dialog/30 px-1 text-[10.5px]">{d.speaker ?? '대사'}</span>
+          {d.paren && <span className="mr-1 text-muted">({d.paren})</span>}
+          <span className="whitespace-pre-wrap">{d.text}</span>
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11.5px] text-muted">
+        {facts
+          .filter(([, v]) => v)
+          .map(([k, v]) => (
+            <span key={k}>
+              <span className="mr-1 text-[10.5px]">{k}</span>
+              <span className="text-ink/80">{v}</span>
+            </span>
+          ))}
+      </div>
+    </div>
   )
 }

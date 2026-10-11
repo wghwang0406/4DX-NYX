@@ -60,6 +60,34 @@ export const paidTools = [
     },
   }),
   defineTool({
+    name: 'image_generate',
+    description:
+      '[유료] 콘티 기반 최종 이미지 생성 요청. 샷의 현재 콘티 이미지를 구도 가이드(레퍼런스 1)로, 에셋 시트를 정체성 레퍼런스로 붙여 프로젝트 최종 룩(project.style.anchorEn)의 스틸을 만든다. 콘티가 없는 샷은 거절된다 — 먼저 conti_generate. 사용자가 콘티를 확인하고 요청할 때만 쓴다. 결과는 stages.image / {EP}/Image/{SEQ}/. 즉시 requestId 반환.',
+    input: {
+      seq: SeqId,
+      shots: z.union([z.literal('all'), z.array(ShotNo).min(1)]),
+      pilot: z.boolean().optional().describe('1장만 먼저'),
+      engine: ENGINE,
+    },
+    handler: (args, ctx) => {
+      const s = requireSequence(ctx, args.seq)
+      const live = s.shots.filter((sh) => !sh.deleted)
+      const hasConti = (no: string) => !!live.find((sh) => sh.no === no)?.stages.conti.currentVersionId
+      let nos: string[]
+      if (args.shots === 'all') nos = live.filter((sh) => sh.stages.conti.currentVersionId).map((sh) => sh.no)
+      else {
+        const set = new Set(live.map((sh) => sh.no))
+        const missing = args.shots.filter((n) => !set.has(n))
+        if (missing.length) throw new ToolError(`샷 없음: ${missing.join(', ')}`)
+        const noConti = args.shots.filter((n) => !hasConti(n))
+        if (noConti.length) throw new ToolError(`콘티 이미지가 없는 샷: ${noConti.join(', ')} — 먼저 conti_generate`)
+        nos = args.shots
+      }
+      if (!nos.length) throw new ToolError('콘티가 있는 샷이 없습니다 — 먼저 conti_generate')
+      return createSpend(ctx, 'image_generate', args.pilot ? 1 : nos.length, { ...args, shots: nos })
+    },
+  }),
+  defineTool({
     name: 'assets_generate',
     description:
       '[유료] 에셋 시트/뷰 생성 요청. 기본 모델은 인물 soul / 장소 soulcine / 소품 nano 지만 engine=codex 면 전부 GPT(Codex) 로 만든다. char = 3패널 시트(sheet) + 파생 front/back/face, loc = wide 정본 + 34/top/detail 뷰 변경, prop = top/34/detail. views 로 일부만. 프롬프트는 앱이 에셋 필드 + Lira 템플릿으로 조립한다. 즉시 requestId 반환.',

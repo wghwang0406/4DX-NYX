@@ -104,4 +104,6 @@ export const ROUTE = {
   prop: 'nano_banana_2',
   edit: 'nano_banana_2',
   restyle: 'gpt_image_2_5',
+  /** 콘티 → 최종 이미지 (GenConti2Img 기본 gpt) */
+  image: 'gpt_image_2_5',
 } as const

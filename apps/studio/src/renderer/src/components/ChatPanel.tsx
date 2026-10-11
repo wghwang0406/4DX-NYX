@@ -255,6 +255,7 @@ function SpendCard({
     assets_generate: '에셋',
     image_edit: '이미지 수정',
     panel_restyle: '다시 그리기',
+    image_generate: '이미지',
   }
   const [open, setOpen] = useState(false)
   const [preview, setPreview] = useState<SpendPreview | null>(null)
@@ -262,7 +263,7 @@ function SpendCard({
   const api = window.conti?.agent
   const waiting = req.status === 'awaiting_approval'
   const active = req.status === 'approved' || req.status === 'pilot'
-  const regen = req.kind === 'conti_generate' && req.shots && req.shots.length > 0
+  const regen = (req.kind === 'conti_generate' || req.kind === 'image_generate') && req.shots && req.shots.length > 0
   // 이미지 엔진: 고르기 전엔 요청/프로젝트 기본값(미리보기가 알려준다)
   const [engine, setEngine] = useState<'higgsfield' | 'codex' | undefined>()
   const [codexReady, setCodexReady] = useState<boolean | null>(null)

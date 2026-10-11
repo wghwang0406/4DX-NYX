@@ -34,6 +34,12 @@ export interface ContiPromptInput {
   style: 'sketch' | 'cinematic'
   /** 붙일 레퍼런스 순서대로 — 본문에서 "reference image N" 으로 가리킨다 */
   refs: ContiRef[]
+  /** 앞에 다른 레퍼런스(예: 콘티 프레임)가 먼저 붙으면 그 수만큼 번호를 민다 */
+  refOffset?: number
+  /** 스타일 줄을 바꾼다 (이미지 단계 = 프로젝트 최종 룩) */
+  styleLine?: string
+  /** 맨 앞에 붙일 지시 (이미지 단계 = 콘티 프레임을 구도 가이드로) */
+  leadLine?: string
 }
 
 export interface BuiltPrompt {
@@ -52,10 +58,11 @@ export function styleLineFor(project: Project, style: 'sketch' | 'cinematic'): s
 export function buildContiPrompt(i: ContiPromptInput): BuiltPrompt {
   const s = i.shot.promptSlots ?? {}
   const byTag = new Map(i.assets.map((a) => [a.tag, a]))
-  const refIndex = new Map(i.refs.map((r, n) => [r.tag, n + 1]))
+  const refIndex = new Map(i.refs.map((r, n) => [r.tag, n + 1 + (i.refOffset ?? 0)]))
   const lines: string[] = []
 
-  lines.push(sentence(styleLineFor(i.project, i.style)))
+  if (i.leadLine) lines.push(sentence(i.leadLine))
+  lines.push(sentence(clean(i.styleLine) || styleLineFor(i.project, i.style)))
 
   const size = clean(s.shotSizeEn) || (i.shot.sizeCode ? SIZE_EN[i.shot.sizeCode] : 'medium shot')
   const angle = clean(s.angleEn) || clean(i.shot.angle) || 'eye level'

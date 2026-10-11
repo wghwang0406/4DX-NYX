@@ -344,6 +344,11 @@ describe('paid stubs + jobs', () => {
     expect(noImg.isError).toBe(true)
     expect(noImg.content[0].text).toMatch(/아직 없습니다/)
     expect((await call('panel_restyle', { seq: 'S01', shotNos: ['0010', '0020'] })).isError).toBe(true)
+    // 콘티 기반 이미지는 콘티가 있어야 한다 (특정 샷 → 거절, all → 콘티 있는 샷이 없으면 거절)
+    const noConti = await call('image_generate', { seq: 'S01', shots: ['0010'] })
+    expect(noConti.isError).toBe(true)
+    expect(noConti.content[0].text).toMatch(/콘티 이미지가 없는 샷: 0010/)
+    expect((await call('image_generate', { seq: 'S01', shots: 'all', engine: 'codex' })).isError).toBe(true)
     // 에셋 장수 = 종류별 뷰 수 (char 4 / loc 4 / prop 3), views 를 주면 그 수
     expect(json(await call('assets_generate', { ep: 'EP01', ids: ['@해수'], views: ['sheet', 'front', 'back', 'face'] })).count).toBe(4)
     expect(json(await call('assets_generate', { ep: 'EP01', ids: ['@해수'] })).count).toBe(4)
