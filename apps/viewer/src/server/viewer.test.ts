@@ -197,6 +197,20 @@ describe('publish → review → feedback loop', () => {
     // 루트 주소는 현황 화면(웹) — 토큰 없이도 페이지 자체는 열린다
     expect((await fetch(`${base}/`)).status).toBe(200)
   })
+
+  it('overviewPublic (NYX_OVERVIEW_OPEN=1) opens only the overview without a token — studio API stays locked', async () => {
+    const open = createViewerServer({ dataDir: dir, publishToken: TOKEN, overviewPublic: true })
+    const ob = (await open.start()).url
+    try {
+      const r = await fetch(`${ob}/api/admin/overview`)
+      expect(r.status).toBe(200)
+      expect((await r.json()).projects.some((p: { id: string }) => p.id === 'proj-1')).toBe(true)
+      expect((await fetch(`${ob}/api/projects/proj-1/publications`)).status).toBe(401)
+      expect((await fetch(`${ob}/api/admin/releases/x.dmg`, { method: 'PUT', body: new Uint8Array(4) })).status).toBe(401)
+    } finally {
+      await open.stop()
+    }
+  })
 })
 
 describe('releases & backups', () => {

@@ -32,20 +32,22 @@ const when = (t: number) => new Date(t).toLocaleString('ko-KR', { month: 'numeri
 
 /**
  * 서버 PC 주소(http://IP:8787/)로 여는 현황 화면 — 서버 상태와 게시된 판 목록.
- * 리뷰 링크가 보이므로 팀 게시 토큰(스튜디오 설정 › 게시 서버와 같은 값)으로 잠근다.
+ * 서버가 NYX_OVERVIEW_OPEN=1 이면 토큰 없이 열리고, 아니면 팀 게시 토큰(스튜디오 설정 › 게시 서버와 같은 값)으로 잠근다.
  */
 export default function Overview() {
   const [token, setToken] = useState(readToken())
+  // 서버가 현황을 토큰 없이 열어 두면(NYX_OVERVIEW_OPEN=1) 토큰 없이 바로 보인다. 잠겨 있으면 401 → 입력 화면
+  const [needToken, setNeedToken] = useState(false)
   const [input, setInput] = useState('')
   const [data, setData] = useState<OverviewData | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!token) return
     try {
-      const res = await fetch('/api/admin/overview', { headers: { authorization: `Bearer ${token}` } })
+      const res = await fetch('/api/admin/overview', token ? { headers: { authorization: `Bearer ${token}` } } : undefined)
       if (res.status === 401 || res.status === 403) {
-        setErr('토큰이 맞지 않습니다')
+        setNeedToken(true)
+        setErr(token ? '토큰이 맞지 않습니다' : null)
         setToken('')
         try {
           localStorage.removeItem(KEY)
@@ -56,6 +58,7 @@ export default function Overview() {
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setData(await res.json())
+      setNeedToken(false)
       setErr(null)
     } catch (e) {
       setErr((e as Error).message)
@@ -67,7 +70,7 @@ export default function Overview() {
     return () => clearInterval(id)
   }, [load])
 
-  if (!token)
+  if (needToken && !data)
     return (
       <div className="center">
         <form
@@ -82,6 +85,7 @@ export default function Overview() {
               /* */
             }
             setToken(t)
+            setNeedToken(false)
           }}
         >
           <b>NYX 뷰어 현황</b>
@@ -114,20 +118,22 @@ export default function Overview() {
           <button className="btn" onClick={() => void load()}>
             새로고침
           </button>
-          <button
-            className="link"
-            onClick={() => {
-              try {
-                localStorage.removeItem(KEY)
-              } catch {
-                /* */
-              }
-              setToken('')
-              setData(null)
-            }}
-          >
-            토큰 지우기
-          </button>
+          {token && (
+            <button
+              className="link"
+              onClick={() => {
+                try {
+                  localStorage.removeItem(KEY)
+                } catch {
+                  /* */
+                }
+                setToken('')
+                setData(null)
+              }}
+            >
+              토큰 지우기
+            </button>
+          )}
         </div>
       </header>
       <div className="stage" style={{ maxWidth: 1100, width: '100%', margin: '0 auto' }}>

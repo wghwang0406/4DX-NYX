@@ -23,6 +23,8 @@ export interface ViewerConfig {
   dropbox?: Dropbox | null
   maxChunk?: number
   version?: string
+  /** 현황 화면(/api/admin/overview)을 토큰 없이 연다 — 사내망 전용 서버일 때. 게시·피드백 API 는 여전히 토큰 필요 */
+  overviewPublic?: boolean
 }
 
 export interface ViewerServer {
@@ -313,7 +315,7 @@ export function createViewerServer(cfg: ViewerConfig): ViewerServer {
     // ── 앱 배포 (서명 없는 사내 배포 — 새 버전 알림 + 내려받기) ──
     // 현황 (서버 PC 주소로 열어 보는 관리 화면) — 리뷰 링크가 보이므로 게시 토큰 필요
     if (path === '/api/admin/overview' && method === 'GET') {
-      requireStudio(req)
+      if (!cfg.overviewPublic) requireStudio(req)
       const o = db.overview()
       const now = Date.now()
       return send(res, 200, {

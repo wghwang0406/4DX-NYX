@@ -22,6 +22,7 @@ const server = createViewerServer({
   port: Number(env.NYX_PORT ?? 8787),
   webDir,
   dropbox,
+  overviewPublic: env.NYX_OVERVIEW_OPEN === '1',
 })
 const { url } = await server.start()
 console.log(`NYX viewer ${url}  web=${webDir ?? '(없음)'}  dropbox=${dropbox ? dropbox.root : '꺼짐'}`)

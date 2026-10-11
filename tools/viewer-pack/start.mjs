@@ -38,11 +38,18 @@ if (!conf.NYX_PUBLISH_TOKEN) {
   changed = true
 }
 conf.NYX_PORT ??= '8787'
+// 현황 화면(http://IP:8787/)은 토큰 없이 연다 — 잠그려면 nyx-viewer.env 에서 NYX_OVERVIEW_OPEN=0
+if (conf.NYX_OVERVIEW_OPEN === undefined) {
+  conf.NYX_OVERVIEW_OPEN = '1'
+  changed = true
+}
 if (changed || !existsSync(envFile)) {
   const lines = [
     '# NYX 뷰어 서버 설정 — 이 파일을 지우면 토큰이 새로 만들어집니다 (스튜디오 설정도 다시 넣어야 함)',
     `NYX_PUBLISH_TOKEN=${conf.NYX_PUBLISH_TOKEN}`,
     `NYX_PORT=${conf.NYX_PORT}`,
+    '# 현황 화면을 토큰 없이 열기 (1) / 게시 토큰으로 잠그기 (0). 게시·피드백은 항상 토큰 필요',
+    `NYX_OVERVIEW_OPEN=${conf.NYX_OVERVIEW_OPEN}`,
     '# 링크에 찍힐 주소 — 비워 두면 이 PC 의 사내 IP 로 자동',
     `NYX_PUBLIC_URL=${conf.NYX_PUBLIC_URL ?? ''}`,
     '# Dropbox 보관 (선택): DROPBOX_TOKEN=… 또는 DROPBOX_REFRESH_TOKEN / DROPBOX_APP_KEY / DROPBOX_APP_SECRET',
@@ -68,7 +75,7 @@ process.env.NYX_WEB ??= join(here, 'web')
 
 const bar = '═'.repeat(64)
 console.log(`\n${bar}\n  NYX 뷰어 서버\n${bar}`)
-console.log(`  현황 화면 (다른 PC 브라우저):  ${url}/`)
+console.log(`  현황 화면 (다른 PC 브라우저):  ${url}/${conf.NYX_OVERVIEW_OPEN === '1' ? '   (토큰 없이 열림)' : '   (게시 토큰으로 잠김)'}`)
 console.log(`  스튜디오 설정 › 게시 서버에 넣을 값`)
 console.log(`     주소   ${url}`)
 console.log(`     토큰   ${conf.NYX_PUBLISH_TOKEN}`)
