@@ -2,7 +2,7 @@
 // 가짜 codex — `codex exec --json … -` 의 이미지 생성 흐름을 흉내 낸다 (spikes/codex/REPORT.md "이미지 생성").
 // stdin 지시를 받아 thread.started → (item.completed image_gen) → turn.completed, $CODEX_HOME/generated_images/<thread>/exec-<id>.png 저장.
 // FAKE_CODEX_FAIL=auth|usage|noimage  FAKE_CODEX_MS=<지연>  FAKE_CODEX_LOG=<호출 기록 파일>  FAKE_CODEX_HANG=1(결과 파일만 쓰고 종료 안 함)
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -31,10 +31,22 @@ function png(w, h, rgb) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))])
 }
 
-// 로그인 상태 확인 (앱 계정 화면·승인 카드가 부른다)
+// 로그인: FAKE_CODEX_REQUIRE_LOGIN=1 이면 $CODEX_HOME/fake-auth 가 있어야 로그인 상태.
+// `codex login` 은 실제처럼 로그인 주소를 출력하고, 잠시 뒤(브라우저에서 끝낸 셈) 그 파일을 만들고 끝난다.
+const HOME = process.env.CODEX_HOME ?? join(homedir(), '.codex')
+const AUTH = join(HOME, 'fake-auth')
+const loggedIn = () => process.env.FAKE_CODEX_FAIL !== 'auth' && (!process.env.FAKE_CODEX_REQUIRE_LOGIN || existsSync(AUTH))
 if (process.argv[2] === 'login' && process.argv[3] === 'status') {
-  process.stdout.write(process.env.FAKE_CODEX_FAIL === 'auth' ? 'Not logged in\n' : 'Logged in using ChatGPT\n')
-  process.exit(process.env.FAKE_CODEX_FAIL === 'auth' ? 1 : 0)
+  process.stdout.write(loggedIn() ? 'Logged in using ChatGPT\n' : 'Not logged in\n')
+  process.exit(loggedIn() ? 0 : 1)
+}
+if (process.argv[2] === 'login' && !process.argv[3]) {
+  process.stdout.write('Starting local login server on http://localhost:1455.\nIf your browser did not open, navigate to this URL to authenticate:\n\nhttps://auth.openai.com/oauth/authorize?response_type=code&client_id=fake&state=x\n')
+  await new Promise((r) => setTimeout(r, Number(process.env.FAKE_CODEX_LOGIN_MS ?? 800)))
+  mkdirSync(HOME, { recursive: true })
+  writeFileSync(AUTH, 'ok')
+  process.stdout.write('Successfully logged in\n')
+  process.exit(0)
 }
 
 let stdin = ''
@@ -46,7 +58,7 @@ process.stdin.on('end', async () => {
   out({ type: 'thread.started', thread_id: thread })
   out({ type: 'turn.started' })
   await sleep(Number(process.env.FAKE_CODEX_MS ?? 50))
-  const fail = process.env.FAKE_CODEX_FAIL
+  const fail = loggedIn() ? process.env.FAKE_CODEX_FAIL : 'auth'
   if (fail === 'auth') {
     out({ type: 'error', message: 'Reconnecting... 1/5 (unexpected status 401 Unauthorized)' })
     out({ type: 'turn.failed', error: { message: 'unexpected status 401 Unauthorized: Missing bearer or basic authentication in header' } })

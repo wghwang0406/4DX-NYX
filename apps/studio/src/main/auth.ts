@@ -97,7 +97,8 @@ export class AuthManager {
   /** 로그인 시작 — 즉시 돌아오고 진행은 auth:event 로. 브라우저는 CLI 가 연다; URL 은 이벤트로도 보낸다. */
   async login(tool: AuthTool, opts: LoginOptions = {}): Promise<void> {
     if (this.procs.has(tool)) throw new Error('이미 로그인 진행 중입니다')
-    const bin = await findBin(tool)
+    // 검증: codex 는 CONTI_CODEX_BIN(가짜) 이 있으면 그것으로 — 상태 확인·이미지 엔진과 같은 바이너리
+    const bin = tool === 'codex' && process.env.CONTI_CODEX_BIN ? process.env.CONTI_CODEX_BIN : await findBin(tool)
     if (!bin) throw new Error(`${tool} CLI 가 설치돼 있지 않습니다`)
     const args = CMD[tool].login(opts)
     const child = crossSpawn(bin, args, { env: { ...process.env, PATH: enrichedPath(), HIGGSFIELD_NO_UPDATE_CHECK: '1', NO_COLOR: '1' }, stdio: ['pipe', 'pipe', 'pipe'] })

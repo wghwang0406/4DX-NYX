@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { CheckCircle2, XCircle, LogIn, LogOut, RefreshCw, ExternalLink, Loader2, AlertTriangle, Stethoscope, Server } from 'lucide-react'
 import type { AccountStatus, AuthEvent, AuthTool, LoginOptions } from '../../../shared/auth-ipc'
 import DiagnosticsView from './DiagnosticsView'
+import CodexLogin from '../components/CodexLogin'
 
 const LABEL: Record<AuthTool, { name: string; desc: string }> = {
   claude: { name: 'Claude Code', desc: 'AI 어시스턴트 — Claude 구독(claude.ai) 또는 Anthropic Console API 계정' },
@@ -116,7 +117,7 @@ export default function SettingsView() {
             </div>
           </section>
 
-          <EngineSettings codexReady={!!accounts?.find((x) => x.tool === 'codex')?.loggedIn} />
+          <EngineSettings codexReady={!!accounts?.find((x) => x.tool === 'codex')?.loggedIn} onLogin={() => void load()} />
 
           {(accounts ?? (['claude', 'codex', 'higgsfield'] as AuthTool[]).map((tool): AccountStatus => ({ tool, installed: true, loggedIn: false, busy: false }))).map((a) => {
             const flow = flows[a.tool]
@@ -287,7 +288,7 @@ export function ServerSettings() {
 }
 
 /** 이 프로젝트의 이미지 생성 엔진 기본값 — 승인 카드에서 요청마다 바꿀 수 있다 */
-function EngineSettings({ codexReady }: { codexReady: boolean }) {
+function EngineSettings({ codexReady, onLogin }: { codexReady: boolean; onLogin: () => void }) {
   const { project, refresh } = useProject()
   if (!project) return null
   const cur = project.defaults.imageEngine ?? 'higgsfield'
@@ -309,10 +310,15 @@ function EngineSettings({ codexReady }: { codexReady: boolean }) {
           <div className="font-medium">GPT · Codex</div>
           <div className="mt-0.5 text-[11.5px] text-muted">
             로그인한 Codex(ChatGPT)의 이미지 생성. Higgsfield 크레딧을 쓰지 않고 시트를 레퍼런스로 붙입니다. 한 장 1–2분, Soul ID 없음
-            {!codexReady && <span className="mt-1 block text-warn">아래 Codex 에 먼저 로그인하세요</span>}
           </div>
         </button>
       </div>
+      {!codexReady && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
+          <span className="text-warn">GPT · Codex 를 쓰려면 Codex(ChatGPT 계정) 로그인이 필요합니다</span>
+          <CodexLogin onDone={onLogin} />
+        </div>
+      )}
     </section>
   )
 }

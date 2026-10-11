@@ -1,3 +1,4 @@
+import CodexLogin from './CodexLogin'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Paperclip, Send, Sparkles, FileImage, Square, Wrench, Check, AlertTriangle } from 'lucide-react'
 import type { Scene } from '../data/sampleScene'
@@ -265,13 +266,16 @@ function SpendCard({
   // 이미지 엔진: 고르기 전엔 요청/프로젝트 기본값(미리보기가 알려준다)
   const [engine, setEngine] = useState<'higgsfield' | 'codex' | undefined>()
   const [codexReady, setCodexReady] = useState<boolean | null>(null)
-  useEffect(() => {
-    if (!waiting || !window.conti?.auth) return
+  const refreshCodex = useCallback(() => {
+    if (!window.conti?.auth) return
     void window.conti.auth
       .status()
       .then((list) => setCodexReady(!!list.find((a) => a.tool === 'codex')?.loggedIn))
       .catch(() => setCodexReady(null))
-  }, [waiting])
+  }, [])
+  useEffect(() => {
+    if (waiting) refreshCodex()
+  }, [waiting, refreshCodex])
 
   // 계획 미리보기(무료) — 엔진 기본값을 알기 위해 항상, 체크박스·엔진이 바뀌면 다시
   useEffect(() => {
@@ -336,7 +340,12 @@ function SpendCard({
               {label}
             </button>
           ))}
-          {curEngine === 'codex' && codexReady === false && <span className="ml-1 text-warn">Codex 로그인 필요</span>}
+        </div>
+      )}
+      {waiting && codexReady === false && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11.5px]" data-testid="codex-login-row">
+          <span className={curEngine === 'codex' ? 'text-warn' : 'text-muted'}>GPT 로 만들려면 Codex(ChatGPT 계정) 로그인이 필요합니다</span>
+          <CodexLogin onDone={refreshCodex} />
         </div>
       )}
       {waiting && regen && (

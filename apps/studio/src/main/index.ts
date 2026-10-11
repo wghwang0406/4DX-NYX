@@ -80,6 +80,7 @@ function createWindow(): BrowserWindow {
     if (process.env.CONTI_SHOT) query.shot = process.env.CONTI_SHOT
     if (process.env.CONTI_SEQ) query.seq = process.env.CONTI_SEQ
     if (process.env.CONTI_LAB) query.lab = '1'
+    if (process.env.CONTI_EXPAND) query.expand = '1' // 캡처용: 에셋 카드 모두 펼침
     if (process.env.CONTI_VIDEO_UI) query.video = '1'
     if (process.env.CONTI_SETTINGS) query.settings = process.env.CONTI_SETTINGS
     void win.loadFile(join(__dirname, '../renderer/index.html'), Object.keys(query).length ? { query } : undefined)

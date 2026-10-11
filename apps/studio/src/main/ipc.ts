@@ -464,14 +464,26 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
       if (process.env.CONTI_E2E_CARD) {
         const win = getWindow()!
         const js = (c: string) => win.webContents.executeJavaScript(c)
-        for (let i = 0; i < 40 && !(await js(`!!document.querySelector('[data-testid=engine-switch] [data-engine=codex]:not([disabled])')`)); i++) await new Promise((r) => setTimeout(r, 250))
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+        for (let i = 0; i < 40 && !(await js(`!!document.querySelector('[data-testid=engine-switch]')`)); i++) await sleep(250)
+        await sleep(800) // 로그인 상태 확인이 끝날 때까지
+        // 로그아웃 상태면 카드 안의 [Codex 로그인] 을 누른다 (가짜 codex 가 브라우저 로그인을 흉내)
+        const before = await js(`({ gptDisabled: !!document.querySelector('[data-testid=engine-switch] [data-engine=codex][disabled]'), loginButton: !!document.querySelector('[data-testid=codex-login]') })`)
+        if (before.loginButton) {
+          if (process.env.CONTI_E2E_SHOTDIR) await writeFile(join(process.env.CONTI_E2E_SHOTDIR, 'card_login.png'), (await win.webContents.capturePage()).toPNG())
+          await js(`document.querySelector('[data-testid=codex-login]').click()`)
+          await sleep(300)
+          before.runningShown = await js(`!!document.querySelector('[data-testid=codex-login-running]')`)
+        }
+        for (let i = 0; i < 60 && !(await js(`!!document.querySelector('[data-testid=engine-switch] [data-engine=codex]:not([disabled])')`)); i++) await sleep(250)
+        before.afterLogin = await js(`({ gptEnabled: !!document.querySelector('[data-testid=engine-switch] [data-engine=codex]:not([disabled])'), loginRow: !!document.querySelector('[data-testid=codex-login-row]') })`)
         await js(`document.querySelector('[data-testid=engine-switch] [data-engine=${engine ?? 'codex'}]').click()`)
         await new Promise((r) => setTimeout(r, 700))
         const card = await js(`(() => { const sw = document.querySelector('[data-testid=engine-switch]'); return { active: sw?.querySelector('.border-accent')?.textContent, text: sw?.closest('.rounded-lg')?.innerText.slice(0, 200) } })()`)
         if (process.env.CONTI_E2E_SHOTDIR) await writeFile(join(process.env.CONTI_E2E_SHOTDIR, 'card_engine.png'), (await win.webContents.capturePage()).toPNG())
         await js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '승인')?.click()`)
         const jobs = await waitAll(req.requestId)
-        return { card, request: h.spendList().find((r) => r.requestId === req.requestId), jobs, shots: dump() }
+        return { login: before, card, request: h.spendList().find((r) => r.requestId === req.requestId), jobs, shots: dump() }
       }
       const preview = await h.spendPreview(req.requestId, undefined, engine)
       await h.spendDecide(req.requestId, decision, undefined, engine)
