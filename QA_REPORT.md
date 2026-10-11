@@ -324,3 +324,12 @@ main `LayoutService`(미리보기 렌더, 숨은 창 PDF·2x PNG, ffmpeg 애니�
 | 낮 | Apple Silicon(arm64) dmg 만 — Intel 맥용은 `--x64` 로 다시 패키징 | |
 | 낮 | 앱 아이콘이 기본 Electron 아이콘 | 디자인 받으면 `icon.icns` 추가 |
 | 낮 | 진단의 claude 상세에 조직 id 가 남는다(이메일은 가림) | 사내 지원용이라 둠 |
+
+---
+
+# 출시 후 수정 (2026-10-11)
+
+| 항목 | 원인 | 조치·검증 |
+|---|---|---|
+| **빌드된 앱에서 시나리오 PDF 가져오기 실패** — `Setting up fake worker failed: Cannot find module …/out/main/pdf.worker.mjs` | pdf.js 가 메인 번들에 묶이면서 옆에서 불러오는 `pdf.worker.mjs` 가 빌드 결과에 복사되지 않았다. PDF 테스트는 번들 전 코드(tsx)로만 돌았고, 빌드된 앱에서 실제 PDF 를 넣는 검증이 없었다(QA 공백) | `electron.vite.config.ts` 에서 빌드 때 worker 를 `out/main` 에 복사. 검증 훅 `CONTI_E2E_PDF` 로 **개발 빌드·패키징 앱 둘 다** 고래별 70씬·남벌 97씬 확인. pdf.js 의 `@napi-rs/canvas`·DOMMatrix 경고는 페이지 렌더링용이라 무시(텍스트 추출만 씀) |
+| Sources 화면 제목이 "소스"로 남음 | 메뉴 이름 변경 때 화면 안 제목을 빠뜨림 | "Sources" 로 |
