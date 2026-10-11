@@ -210,13 +210,22 @@ async function planImage(ctx: PlanContext, a: { seq: string; shots: string[]; pi
   const seq = requireSeq(ctx.store, a.seq)
   const assets = (await ctx.store.listAssets(seq.ep)).assets
   const notes: string[] = []
-  let nos = opts.includeNeighbors ? expandNeighbors(seq, a.shots) : a.shots
-  if (opts.includeNeighbors && nos.length !== a.shots.length) notes.push(`앞뒤 컷 포함: ${nos.length - a.shots.length}장 추가`)
-  const noConti = nos.filter((no) => {
+  const hasConti = (no: string) => {
     const shot = liveShots(seq).find((s) => s.no === no)
-    return !shot || !currentContiVersion(shot)
-  })
+    return !!shot && !!currentContiVersion(shot)
+  }
+  // 고른 컷은 콘티가 꼭 있어야 하고, [앞뒤 컷 포함] 으로 붙은 컷은 콘티가 있는 것만 (없으면 빼고 알린다)
+  const noConti = a.shots.filter((no) => !hasConti(no))
   if (noConti.length) throw new PlanError(`콘티 이미지가 없습니다: ${noConti.join(', ')} — 먼저 콘티를 만드세요`)
+  let nos = a.shots
+  if (opts.includeNeighbors) {
+    const expanded = expandNeighbors(seq, a.shots)
+    const extra = expanded.filter((no) => !a.shots.includes(no))
+    const skipped = extra.filter((no) => !hasConti(no))
+    nos = expanded.filter((no) => a.shots.includes(no) || hasConti(no))
+    if (nos.length !== a.shots.length) notes.push(`앞뒤 컷 포함: ${nos.length - a.shots.length}장 추가`)
+    if (skipped.length) notes.push(`앞뒤 컷 중 콘티가 없는 ${skipped.join(', ')} 은(는) 뺐습니다`)
+  }
   const pilot = decision === 'pilot' || !!a.pilot
   let rest: PlanResult['rest']
   if (pilot && nos.length > 1) {

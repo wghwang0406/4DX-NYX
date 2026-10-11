@@ -529,6 +529,21 @@ describe('image stage (콘티 → 최종 이미지)', () => {
     expect(cx.rest).toEqual({ args: { seq: 'S41', shots: ['0040'], pilot: false, engine: 'codex' }, count: 1 })
   })
 
+  it('앞뒤 컷 포함: neighbours without conti are skipped with a note instead of failing the request', async () => {
+    const { store } = await makeProject('img-nb')
+    await addConti(store, '0010')
+    await addConti(store, '0030')
+    // 0020 은 콘티 없음 → 0010 을 고르고 앞뒤 포함하면 0020 은 빠진다
+    const r = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0010'] }, 'approved', { includeNeighbors: true })
+    expect(r.plans.filter((p) => p.target.type === 'shot').map((p) => (p.target as { shotNo: string }).shotNo)).toEqual(['0010'])
+    expect(r.notes.join('\n')).toMatch(/콘티가 없는 0020 은\(는\) 뺐습니다/)
+    // 0030 을 고르면 앞뒤 중 0040 은 콘티 없음(빠짐), 0020 도 없음 → 0030 만
+    const r2 = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030'] }, 'approved', { includeNeighbors: true })
+    expect(r2.plans.filter((p) => p.target.type === 'shot')).toHaveLength(1)
+    // 고른 컷 자체에 콘티가 없으면 여전히 거절
+    await expect(planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0020'] }, 'approved', { includeNeighbors: true })).rejects.toThrow(/0020/)
+  })
+
   it('no location asset → one Soul Cinema background job first, shots depend on it; existing Background.png is reused', async () => {
     const { root, store } = await makeProject('img-bg')
     await addConti(store, '0010')

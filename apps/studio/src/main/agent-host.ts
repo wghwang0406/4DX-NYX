@@ -9,7 +9,7 @@ import { createContiMcp, type JobView as McpJobView, type SpendKind, type SpendR
 import { adapters, pickAvailable, runStructured, type AgentEvent, type AgentKind, type AgentSession } from '@conti/agents'
 import { ProjectStore, writeAtomic, exists, readText } from '@conti/core'
 import { assetJobCount } from '@conti/domain'
-import { JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, analyzeConti, driftCheck, engineFor, planRequest, type JobEvent, type JobRecord, type RunAi } from '@conti/genengine'
+import { JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, analyzeConti, driftCheck, engineFor, expandNeighbors, planRequest, type JobEvent, type JobRecord, type RunAi } from '@conti/genengine'
 import type { AgentAvailability, AgentUiEvent, ChatMessage, JobView, SpendPreview, SpendRequestView, ThreadInfo } from '../shared/agent-ipc'
 import type { FeedbackItem } from '../shared/publish-ipc'
 import { log } from './log'
@@ -485,6 +485,20 @@ export class AgentHost {
       return
     }
     try {
+      // 이미지: [앞뒤 컷 포함] 으로 붙은 컷도 콘티 분석을 거친다 (이미 분석된 컷은 캐시로 바로 넘어간다)
+      if (req.kind === 'image_generate' && includeNeighbors && view.seq && view.shots?.length) {
+        const seqObj = this.store.getSequence(view.seq)
+        if (seqObj) {
+          const extra = expandNeighbors(seqObj, view.shots)
+          if (extra.length > view.shots.length) {
+            try {
+              await analyzeConti({ store: this.store, seq: view.seq, shotNos: extra, runAi: await this.aiRunner(), shrink: (f) => this.shrink(f) })
+            } catch (e) {
+              log('warn', `앞뒤 컷 콘티 분석 실패: ${(e as Error).message}`)
+            }
+          }
+        }
+      }
       const plan = await planRequest({ store: this.store, models }, req.kind, this.argsWithEngine(req, engine, model), decision, { includeNeighbors })
       if (!plan.plans.length) throw new Error('생성할 것이 없습니다')
       await jobs.submit(requestId, plan.plans)

@@ -282,6 +282,15 @@ function SpendCard({
   const isImage = req.kind === 'image_generate'
   const [model, setModel] = useState<string | undefined>()
   const analyzing = isImage && req.analysis?.state === 'running'
+  // 분석은 30초 안팎 걸린다 — 진행 중임이 보이게 초를 센다
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!analyzing) return
+    setElapsed(0)
+    const t0 = Date.now()
+    const id = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [analyzing])
 
   // 계획 미리보기(무료) — 엔진 기본값을 알기 위해 항상, 체크박스·엔진·모델·분석 결과가 바뀌면 다시
   useEffect(() => {
@@ -356,7 +365,7 @@ function SpendCard({
       )}
       {isImage && req.analysis && (
         <div className={`mt-2 flex flex-wrap items-center gap-2 text-[11.5px] ${req.analysis.state === 'failed' ? 'text-warn' : 'text-muted'}`} data-testid="analysis-status">
-          {req.analysis.state === 'running' && <span className="animate-pulse">콘티 분석 중 — 샷 사이즈·앵글·표정 (GenConti2Img)</span>}
+          {req.analysis.state === 'running' && <span className="animate-pulse">콘티 분석 중 {elapsed}초 — 샷 사이즈·앵글·표정 (GenConti2Img) · 끝나면 [승인] 이 열립니다 (보통 30초 안팎)</span>}
           {req.analysis.state === 'done' && (
             <span>
               ✓ 콘티 분석 {req.analysis.analyzed ? `${req.analysis.analyzed}컷` : '— 이미 분석됨'}
