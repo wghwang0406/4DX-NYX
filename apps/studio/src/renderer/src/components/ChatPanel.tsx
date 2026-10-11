@@ -168,7 +168,7 @@ export default function ChatPanel({ scene, selectedShot, demo }: Props) {
           <Bubble key={m.id} m={m} />
         ))}
         {pending.map((r) => (
-          <SpendCard key={r.requestId} req={r} includeNeighbors={includeNeighbors} setIncludeNeighbors={setIncludeNeighbors} onDecide={(d, engine) => void api.spendDecide(r.requestId, d, includeNeighbors, engine).then(() => api.spendList().then(setSpends))} />
+          <SpendCard key={r.requestId} req={r} includeNeighbors={includeNeighbors} setIncludeNeighbors={setIncludeNeighbors} onDecide={(d, engine, model) => void api.spendDecide(r.requestId, d, includeNeighbors, engine, model).then(() => api.spendList().then(setSpends))} />
         ))}
         {error && <div className="rounded-md border border-red-900/60 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">{error}</div>}
       </div>
@@ -248,7 +248,7 @@ function SpendCard({
   req: SpendRequestView
   includeNeighbors: boolean
   setIncludeNeighbors: (v: boolean) => void
-  onDecide: (d: 'approved' | 'rejected' | 'pilot', engine?: 'higgsfield' | 'codex') => void
+  onDecide: (d: 'approved' | 'rejected' | 'pilot', engine?: 'higgsfield' | 'codex', model?: string) => void
 }) {
   const label: Record<string, string> = {
     conti_generate: '콘티',
@@ -278,15 +278,20 @@ function SpendCard({
     if (waiting) refreshCodex()
   }, [waiting, refreshCodex])
 
-  // 계획 미리보기(무료) — 엔진 기본값을 알기 위해 항상, 체크박스·엔진이 바뀌면 다시
+  // 이미지(콘티 → 최종) 요청의 Higgsfield 모델 (GenConti2Img: gpt 기본 / nano / cinema / soulcine)
+  const isImage = req.kind === 'image_generate'
+  const [model, setModel] = useState<string | undefined>()
+  const analyzing = isImage && req.analysis?.state === 'running'
+
+  // 계획 미리보기(무료) — 엔진 기본값을 알기 위해 항상, 체크박스·엔진·모델·분석 결과가 바뀌면 다시
   useEffect(() => {
     if (!api || !waiting) return
     let live = true
-    api.spendPreview(req.requestId, includeNeighbors, engine).then((p) => live && setPreview(p)).catch(() => live && setPreview(null))
+    api.spendPreview(req.requestId, includeNeighbors, engine, model).then((p) => live && setPreview(p)).catch(() => live && setPreview(null))
     return () => {
       live = false
     }
-  }, [includeNeighbors, req.requestId, api, waiting, engine])
+  }, [includeNeighbors, req.requestId, api, waiting, engine, model, req.analysis?.state])
   const curEngine = engine ?? preview?.engine ?? 'higgsfield'
   // 진행 중·끝난 요청은 작업 목록을 보여준다
   useEffect(() => {
@@ -349,6 +354,39 @@ function SpendCard({
           <CodexLogin onDone={refreshCodex} />
         </div>
       )}
+      {isImage && req.analysis && (
+        <div className={`mt-2 flex flex-wrap items-center gap-2 text-[11.5px] ${req.analysis.state === 'failed' ? 'text-warn' : 'text-muted'}`} data-testid="analysis-status">
+          {req.analysis.state === 'running' && <span className="animate-pulse">콘티 분석 중 — 샷 사이즈·앵글·표정 (GenConti2Img)</span>}
+          {req.analysis.state === 'done' && (
+            <span>
+              ✓ 콘티 분석 {req.analysis.analyzed ? `${req.analysis.analyzed}컷` : '— 이미 분석됨'}
+              {req.analysis.locationMap ? ' · LOCATION MAP 채움' : ''}
+            </span>
+          )}
+          {req.analysis.state === 'failed' && (
+            <>
+              <span>콘티 분석 실패: {req.analysis.error} — 승인하면 샷 표 값으로 만듭니다</span>
+              {api && (
+                <button onClick={() => void api.reanalyze(req.requestId)} className="rounded border border-line px-1.5 text-[10.5px] hover:text-ink">
+                  다시 분석
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {waiting && isImage && curEngine === 'higgsfield' && (
+        <label className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-muted">
+          모델
+          <select value={model ?? 'gpt'} onChange={(e) => setModel(e.target.value)} className="rounded border border-line bg-bg px-1 py-0.5 text-[11.5px] text-ink outline-none" data-testid="image-model">
+            <option value="gpt">GPT Image 2.5 (기본)</option>
+            <option value="nano">Nano Banana Pro</option>
+            <option value="cinema">Cinematic Studio</option>
+            <option value="soulcine">Soul Cinema</option>
+          </select>
+        </label>
+      )}
+      {req.drift && <div className="mt-2 whitespace-pre-wrap rounded border border-line bg-bg px-2 py-1 text-[11px]" data-testid="drift-line">{req.drift}</div>}
       {waiting && regen && (
         <label className="mt-2 flex items-center gap-1.5 text-[11.5px] text-muted">
           <input type="checkbox" checked={includeNeighbors} onChange={(e) => setIncludeNeighbors(e.target.checked)} /> 앞뒤 컷 포함
@@ -403,11 +441,11 @@ function SpendCard({
       )}
       {waiting && (
         <div className="mt-3 flex gap-2">
-          <button disabled={curEngine === 'codex' && codexReady === false} onClick={() => onDecide('approved', curEngine)} className="flex items-center gap-1 rounded-md bg-accent px-4 py-1.5 text-[12.5px] font-medium text-white hover:brightness-110 disabled:opacity-40">
+          <button disabled={(curEngine === 'codex' && codexReady === false) || analyzing} onClick={() => onDecide('approved', curEngine, model)} className="flex items-center gap-1 rounded-md bg-accent px-4 py-1.5 text-[12.5px] font-medium text-white hover:brightness-110 disabled:opacity-40">
             <Check size={13} /> 승인
           </button>
           {req.count > 1 && (
-            <button disabled={curEngine === 'codex' && codexReady === false} onClick={() => onDecide('pilot', curEngine)} className="rounded-md border border-line px-3 py-1.5 text-[12.5px] hover:bg-panel">
+            <button disabled={(curEngine === 'codex' && codexReady === false) || analyzing} onClick={() => onDecide('pilot', curEngine, model)} className="rounded-md border border-line px-3 py-1.5 text-[12.5px] hover:bg-panel">
               1장만 먼저
             </button>
           )}

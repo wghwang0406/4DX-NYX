@@ -1,14 +1,15 @@
 // AgentHost — 앱 MCP 서버를 띄우고, 로그인된 CLI(claude/codex)로 세션을 열어 이벤트를 렌더러로 흘린다.
 // 유료 요청(승인 카드)은 여기서 판정 → JobService(genengine) 가 생성한다. 모든 생성은 이 한 통로다.
-import { app, type BrowserWindow } from 'electron'
+import { app, nativeImage, type BrowserWindow } from 'electron'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { mkdir, readFile, appendFile } from 'node:fs/promises'
+import { mkdir, readFile, appendFile, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { createContiMcp, type JobView as McpJobView, type SpendKind, type SpendRequest } from '@conti/mcp'
-import { adapters, pickAvailable, type AgentEvent, type AgentKind, type AgentSession } from '@conti/agents'
+import { adapters, pickAvailable, runStructured, type AgentEvent, type AgentKind, type AgentSession } from '@conti/agents'
 import { ProjectStore, writeAtomic, exists, readText } from '@conti/core'
 import { assetJobCount } from '@conti/domain'
-import { JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, engineFor, planRequest, type JobEvent, type JobRecord } from '@conti/genengine'
+import { JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, analyzeConti, driftCheck, engineFor, planRequest, type JobEvent, type JobRecord, type RunAi } from '@conti/genengine'
 import type { AgentAvailability, AgentUiEvent, ChatMessage, JobView, SpendPreview, SpendRequestView, ThreadInfo } from '../shared/agent-ipc'
 import type { FeedbackItem } from '../shared/publish-ipc'
 import { log } from './log'
@@ -19,7 +20,7 @@ interface LiveThread {
   currentAssistantId: string | null
 }
 
-const targetLabel = (j: JobRecord) => (j.target.type === 'shot' ? `${j.target.seq} ${j.target.shotNo}` : `${j.target.tag} ${j.target.view}`)
+const targetLabel = (j: JobRecord) => (j.target.type === 'shot' ? `${j.target.seq} ${j.target.shotNo}` : j.target.type === 'background' ? `${j.target.seq} 배경` : `${j.target.tag} ${j.target.view}`)
 
 export function jobView(j: JobRecord): JobView {
   return {
@@ -84,6 +85,78 @@ export class AgentHost {
       error: req.error,
       parentRequestId: req.parentRequestId,
       progress: prev?.progress,
+      analysis: prev?.analysis,
+      drift: prev?.drift,
+    }
+  }
+
+  // ── GenConti2Img: 콘티 Vision 분석 · 드리프트 확인 ─────────────────────────
+  /** AI 구조화 호출 (로그인된 Claude → Codex). 검증은 CONTI_FAKE_ANALYSIS=1 로 고정 응답 */
+  private async aiRunner(): Promise<RunAi> {
+    if (process.env.CONTI_FAKE_ANALYSIS) {
+      return (async (req: { prompt: string; schema: Record<string, unknown> }) => {
+        const props = (req.schema as { properties: Record<string, unknown> }).properties
+        if ('checks' in props) return { data: { checks: [...req.prompt.matchAll(/- (\d{4}): generated image/g)].map((m) => ({ no: m[1], tag: '@?', ok: true })) } }
+        const shots = [...req.prompt.matchAll(/- (\d{4}): storyboard = image \d+; listed size (\w+|\?); characters ([^;]*);/g)].map((m) => ({ no: m[1], shotSize: m[2] === '?' ? 'MS' : m[2], angleEn: 'eye-level', expressionEn: m[3] === 'none' ? '' : 'jaw set, a held blink', useConti: true, people: m[3] === 'none' ? 0 : m[3].split(',').length }))
+        return { data: { shots, locationMapEn: /LOCATION MAP/.test(req.prompt) ? 'Camera at the road shoulder facing east; light from screen left.' : undefined } }
+      }) as unknown as RunAi
+    }
+    const kind = await pickAvailable('claude')
+    if (!kind) throw new Error('로그인된 AI(Claude 또는 Codex)가 없어 콘티를 분석할 수 없습니다 — 설정 › 계정')
+    return (async (req: { prompt: string; images: string[]; schema: Record<string, unknown> }) => {
+      const r = await runStructured({ kind, cwd: this.store.root, prompt: req.prompt, images: req.images, schema: req.schema, timeoutMs: 240_000 })
+      return { data: r.data }
+    }) as unknown as RunAi
+  }
+
+  /** AI 에 보낼 크기(긴 변 1024 JPEG)로 줄인 임시 파일 */
+  private async shrink(absFile: string): Promise<string> {
+    const dir = join(app.getPath('userData'), 'tmp', 'conti2img')
+    await mkdir(dir, { recursive: true })
+    const out = join(dir, `${createHash('sha1').update(absFile).digest('hex').slice(0, 16)}.jpg`)
+    const img = nativeImage.createFromPath(absFile)
+    if (img.isEmpty()) return absFile
+    const { width, height } = img.getSize()
+    const scale = Math.min(1, 1024 / Math.max(width, height))
+    await writeFile(out, (scale < 1 ? img.resize({ width: Math.round(width * scale) }) : img).toJPEG(82))
+    return out
+  }
+
+  private async runAnalysis(view: SpendRequestView) {
+    if (view.kind !== 'image_generate' || !view.seq || !view.shots?.length) return
+    view.analysis = { state: 'running' }
+    this.emit({ t: 'spend', request: view })
+    try {
+      const r = await analyzeConti({ store: this.store, seq: view.seq, shotNos: view.shots, runAi: await this.aiRunner(), shrink: (f) => this.shrink(f) })
+      view.analysis = { state: 'done', analyzed: r.analyzed.length, locationMap: r.locationMap }
+    } catch (e) {
+      const msg = (e as Error).message
+      log('warn', `콘티 분석 실패 ${view.seq}: ${msg}`)
+      view.analysis = { state: 'failed', error: msg.slice(0, 300) }
+    }
+    this.emit({ t: 'spend', request: view })
+  }
+
+  async reanalyze(requestId: string) {
+    const view = this.spends.get(requestId)
+    if (view) await this.runAnalysis(view)
+  }
+
+  private async runDrift(view: SpendRequestView) {
+    if (!view.seq || !this.jobsvc) return
+    const results = this.jobsvc
+      .list(view.requestId)
+      .filter((j) => j.status === 'done' && j.target.type === 'shot' && j.outFile)
+      .map((j) => ({ shotNo: (j.target as { shotNo: string }).shotNo, file: j.outFile! }))
+    if (!results.length) return
+    try {
+      const line = await driftCheck({ store: this.store, seq: view.seq, results, runAi: await this.aiRunner(), shrink: (f) => this.shrink(f) })
+      if (line) {
+        view.drift = line
+        this.emit({ t: 'spend', request: view })
+      }
+    } catch (e) {
+      log('warn', `드리프트 확인 실패: ${(e as Error).message}`)
     }
   }
 
@@ -98,6 +171,8 @@ export class AgentHost {
           const view = this.viewOf(req)
           this.spends.set(view.requestId, view)
           this.emit({ t: 'spend', request: view })
+          // 콘티 → 최종 이미지: 승인 전에 콘티를 분석한다 (캐시 적중이면 바로 끝)
+          if (view.kind === 'image_generate' && view.status === 'awaiting_approval') void this.runAnalysis(view)
         },
         feedbackList: this.feedback ? (f) => this.feedback!.list(f) : undefined,
         feedbackUpdate: this.feedback ? (id, state, o) => this.feedback!.update(id, state, o) : undefined,
@@ -375,27 +450,28 @@ export class AgentHost {
   }
 
   /** 카드에서 엔진을 바꾸면 요청 인자에 남긴다 (미리보기·승인·파일럿 후속이 같은 엔진) */
-  private argsWithEngine(req: { args: unknown }, engine?: 'higgsfield' | 'codex'): Record<string, unknown> {
+  private argsWithEngine(req: { args: unknown }, engine?: 'higgsfield' | 'codex', model?: string): Record<string, unknown> {
     const args = req.args as Record<string, unknown>
     if (engine) args.engine = engine
+    if (model) args.model = model
     return args
   }
 
-  async spendPreview(requestId: string, includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex'): Promise<SpendPreview> {
+  async spendPreview(requestId: string, includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex', model?: string): Promise<SpendPreview> {
     const { mcp, models } = this.requireEngine()
     const req = mcp.getSpendRequest(requestId)
     if (!req) throw new Error('요청이 없습니다')
-    const args = this.argsWithEngine(req, engine)
+    const args = this.argsWithEngine(req, engine, model)
     const r = await planRequest({ store: this.store, models }, req.kind, args, 'approved', { includeNeighbors })
     return {
       engine: engineFor({ store: this.store, models }, args),
       count: r.plans.length,
       notes: r.notes,
-      items: r.plans.map((p) => ({ target: p.target.type === 'shot' ? `${p.target.seq} ${p.target.shotNo}` : `${p.target.tag} ${p.target.view}`, model: p.model, prompt: p.prompt, refs: p.refs.map((x) => x.label), lint: p.lint })),
+      items: r.plans.map((p) => ({ target: p.target.type === 'shot' ? `${p.target.seq} ${p.target.shotNo}` : p.target.type === 'background' ? `${p.target.seq} 배경` : `${p.target.tag} ${p.target.view}`, model: p.model, prompt: p.prompt, refs: p.refs.map((x) => x.label), lint: p.lint })),
     }
   }
 
-  async spendDecide(requestId: string, decision: 'approved' | 'rejected' | 'pilot', includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex') {
+  async spendDecide(requestId: string, decision: 'approved' | 'rejected' | 'pilot', includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex', model?: string) {
     const view = this.spends.get(requestId)
     if (!view) throw new Error('요청이 없습니다')
     if (view.status !== 'awaiting_approval') return
@@ -409,7 +485,7 @@ export class AgentHost {
       return
     }
     try {
-      const plan = await planRequest({ store: this.store, models }, req.kind, this.argsWithEngine(req, engine), decision, { includeNeighbors })
+      const plan = await planRequest({ store: this.store, models }, req.kind, this.argsWithEngine(req, engine, model), decision, { includeNeighbors })
       if (!plan.plans.length) throw new Error('생성할 것이 없습니다')
       await jobs.submit(requestId, plan.plans)
       mcp.resolveSpendRequest(requestId, decision, { includeNeighbors })
@@ -444,6 +520,7 @@ export class AgentHost {
     if (view) {
       view.status = e.failed && !e.done ? 'failed' : 'done'
       this.emit({ t: 'spend', request: view })
+      if (view.kind === 'image_generate' && e.done > 0) void this.runDrift(view)
     }
     const rest = this.pendingRest.get(e.requestId)
     if (rest && this.mcp) {

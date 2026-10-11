@@ -44,8 +44,7 @@ export default function ShotPreview({ sequence, selectedShot, stage }: Props) {
   const st = shot.stages[stage]
   const currentId = st.currentVersionId ?? versions[0]?.id
   const file = currentStageFile(shot, stage)
-  const contiFile = currentStageFile(shot, 'conti')
-  const hasConti = !!contiFile
+  const hasConti = !!currentStageFile(shot, 'conti')
   const original = shot.panels[0]?.versions.conti.find((v) => v.source === 'video_frame')
 
   async function spend(kind: 'conti_generate' | 'panel_restyle' | 'image_generate') {
@@ -99,14 +98,15 @@ export default function ShotPreview({ sequence, selectedShot, stage }: Props) {
             <img data-testid="shot-preview-image" src={fileUrl(file)} alt="" className="max-h-full max-w-full object-contain" draggable={false} />
             <Maximize2 size={14} className="absolute right-2 top-2 text-white/0 group-hover:text-white/70" />
           </button>
-        ) : stage === 'image' && contiFile ? (
-          // 아직 이미지가 없으면 콘티를 흐리게 보여 주고 생성을 안내한다 (콘티를 보고 사용자가 결정)
-          <div className="relative flex h-full w-full items-center justify-center">
-            <img src={fileUrl(contiFile)} alt="" className="max-h-full max-w-full object-contain opacity-35" draggable={false} />
-            <div className="absolute inset-x-0 bottom-3 text-center text-[12px] text-white/80">아직 이미지가 없습니다 · 콘티를 확인하고 [이 컷 이미지 생성]</div>
+        ) : stage === 'image' && hasConti ? (
+          // 이미지 탭엔 콘티 그림을 보여 주지 않는다 — 영상용 최종 이미지 자리
+          <div className="text-center text-[12px] leading-relaxed text-white/60" data-testid="image-empty">
+            아직 영상용 이미지가 없습니다
+            <br />
+            <span className="text-white/40">콘티는 Shots·Conti 에서 확인하고, [이 컷 이미지 생성] 으로 만듭니다 (콘티 분석 → 승인 카드)</span>
           </div>
         ) : (
-          <div className="text-[12px] text-white/50">{stage === 'image' ? '콘티가 없어 이미지를 만들 수 없습니다 — 콘티 탭에서 먼저 생성' : '아직 콘티 이미지가 없습니다'}</div>
+          <div className="text-[12px] text-white/50">{stage === 'image' ? '콘티가 없어 이미지를 만들 수 없습니다 — Shots·Conti 에서 콘티 먼저' : '아직 콘티 이미지가 없습니다'}</div>
         )}
       </div>
 

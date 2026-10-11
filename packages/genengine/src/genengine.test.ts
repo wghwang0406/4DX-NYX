@@ -17,6 +17,7 @@ import { surgicalEditPrompt, restylePrompt } from './prompts/edit'
 import { pickShotRefs } from './refs'
 import { CODEX_IMAGE_MODEL, engineFor, expandNeighbors, planRequest } from './plan'
 import { RealCodexImage, codexImageInstruction, classifyCodexError, type CodexImageRunner } from './codex-image'
+import { analyzeConti, driftCheck, type RunAi } from './conti2img'
 import { JobCapError, JobService, type JobEvent } from './jobs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -483,28 +484,67 @@ describe('image stage (콘티 → 최종 이미지)', () => {
     return v
   }
 
-  it('plans: needs conti, ref 1 = current conti, asset refs numbered from 2, final look style', async () => {
+  it('plans follow GenConti2Img: template lines, refs char→bg→prop→conti, no action/scene text, analysis drives size/angle/expression', async () => {
     const { store } = await makeProject('img-plan')
     await addView(store, 'EP01', 'c1', 'face', 'EP01/character/char/해수_Character_face_v1.png')
+    await addView(store, 'EP01', 'c1', 'back', 'EP01/character/char/해수_Character_back_v1.png')
+    await addView(store, 'EP01', 'l1', 'detail', 'EP01/character/loc/도로_Location_detail_v1.png')
     await expect(planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030'] }, 'approved')).rejects.toThrow(/콘티 이미지가 없습니다: 0030/)
     const cv = await addConti(store, '0030')
+    // 분석 없음 → 샷 표 값 폴백 + 안내
+    const r0 = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030'] }, 'approved')
+    expect(r0.notes.join('\n')).toMatch(/콘티 분석 없이 샷 표 값으로/)
+    // 분석 있음
+    const shot = store.getSequence('S41')!.shots.find((x) => x.no === '0030')!
+    await store.updateShot('S41', shot.id, { imageAnalysis: { contiVersionId: cv.id, shotSize: 'CU', angleEn: 'low angle', expressionEn: 'jaw set, brow low and still', useConti: true, people: 1, at: 1 } } as never)
     const r = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030'] }, 'approved')
     const p = r.plans[0]
     expect(p.model).toBe('gpt_image_2_5')
     expect(p.target).toMatchObject({ type: 'shot', shotNo: '0030', stage: 'image' })
-    expect(p.refs[0]).toEqual({ file: cv.file, label: '0030 콘티 v1' })
-    expect(p.refs[1].label).toBe('@해수 face')
+    expect(p.refs.map((x) => x.label)).toEqual(['@해수 face', '@loc_도로_dawn detail', '0030 콘티 v1'])
     expect(p.parentVersionId).toBe(cv.id)
-    expect(p.prompt.split('\n')[0]).toMatch(/^Reference image 1 is the approved storyboard frame/)
-    expect(p.prompt).toContain('clean 3D CG animated film look')
-    expect(p.prompt).toContain('reference image 2')
-    expect(p.prompt).not.toMatch(/reference image 1 \(100%/)
-    // GPT 엔진 · 파일럿
+    const lines = p.prompt.split('\n')
+    expect(lines[0]).toBe('clean 3D CG animated film look.')
+    expect(lines[1]).toBe('close-up, low angle — the character from reference image 1, jaw set, brow low and still.')
+    expect(lines).toContain('Follow each character reference image exactly for all character appearance, clothing, and style.')
+    expect(lines).toContain('Follow the background reference image for the environment, materials and lighting direction only.')
+    expect(lines).toContain('Use the storyboard image for shot size, camera angle, and composition only — do NOT copy character appearance or art style from it, and do NOT inherit its color.')
+    expect(lines.at(-2)).toBe('Rule of thirds. Exactly one person in frame.')
+    expect(lines.at(-1)).toBe('Clean plate with no lettering: unmarked surfaces, no subtitles, no watermarks, no storyboard annotations.')
+    // 쓰지 않는 것: 외형·행동·씬 설명·대사·한글
+    expect(p.prompt).not.toMatch(/여기서 멈춰|detective|navy|Action:|Scene:|[가-힣]/)
+    expect(p.lint).toEqual([])
+    // 콘티 제외(캐릭터가 시트와 다름) → 콘티 레퍼런스 빠지고 구도를 글로, 뒷모습이면 back 뷰
+    await store.updateShot('S41', shot.id, { imageAnalysis: { contiVersionId: cv.id, shotSize: 'CU', angleEn: 'eye-level', expressionEn: '', charView: 'back', useConti: false, compositionEn: 'subject on the right third, back to camera', people: 1, at: 2 } } as never)
+    const r2 = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030'] }, 'approved')
+    expect(r2.plans[0].refs.map((x) => x.label)).toEqual(['@해수 back', '@loc_도로_dawn detail'])
+    expect(r2.plans[0].prompt).toContain('Composition: subject on the right third, back to camera.')
+    expect(r2.plans[0].prompt).not.toContain('storyboard image')
+    // 모델 단축명 · GPT 엔진 · 파일럿
+    expect((await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030'], model: 'nano' }, 'approved')).plans[0].model).toBe('nano_banana_2')
     await addConti(store, '0040')
     const cx = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030', '0040'], engine: 'codex' }, 'pilot')
     expect(cx.plans).toHaveLength(1)
     expect(cx.plans[0]).toMatchObject({ engine: 'codex', model: CODEX_IMAGE_MODEL })
     expect(cx.rest).toEqual({ args: { seq: 'S41', shots: ['0040'], pilot: false, engine: 'codex' }, count: 1 })
+  })
+
+  it('no location asset → one Soul Cinema background job first, shots depend on it; existing Background.png is reused', async () => {
+    const { root, store } = await makeProject('img-bg')
+    await addConti(store, '0010')
+    await addConti(store, '0020')
+    const r = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0010', '0020'] }, 'approved')
+    expect(r.plans.map((p) => p.target.type)).toEqual(['background', 'shot', 'shot'])
+    expect(r.plans[0]).toMatchObject({ model: 'soul_cinematic', target: { type: 'background', seq: 'S41' } })
+    expect(r.plans[0].prompt).toMatch(/empty and still/)
+    expect(r.plans[1].dependsOn).toBe(0)
+    expect(r.plans[2].dependsOn).toBe(0)
+    expect(r.notes.join('\n')).toMatch(/배경 한 장을 먼저/)
+    await mkdir(join(root, 'EP01/Image/S41'), { recursive: true })
+    await writeFile(join(root, 'EP01/Image/S41/S41_Background.png'), PNG)
+    const r2 = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0010'] }, 'approved')
+    expect(r2.plans.map((p) => p.target.type)).toEqual(['shot'])
+    expect(r2.plans[0].refs.map((x) => x.label)).toContain('S41 배경')
   })
 
   it('JobService writes EP/Image/SEQ and stages.image, keeps conti; new conti marks image stale', async () => {
@@ -517,8 +557,12 @@ describe('image stage (콘티 → 최종 이미지)', () => {
     const r = await planRequest({ store, models }, 'image_generate', { seq: 'S41', shots: ['0030'] }, 'approved')
     await svc.submit('req-img', r.plans)
     const w = await svc.waitRequest('req-img', 15_000)
-    expect(w.jobs[0].status).toBe('done')
-    expect(w.jobs[0].outFile).toBe('EP01/Image/S41/S41_0030_v1.png')
+    // 장소 에셋이 없어 배경 폴백이 먼저 → 그 결과를 배경 레퍼런스로 샷 이미지
+    expect(w.jobs.map((j) => [j.status, j.outFile])).toEqual([
+      ['done', 'EP01/Image/S41/S41_Background.png'],
+      ['done', 'EP01/Image/S41/S41_0030_v1.png'],
+    ])
+    expect(w.jobs[1].refs[0]).toMatchObject({ file: 'EP01/Image/S41/S41_Background.png', label: '정본' })
     expect((await readdir(join(root, 'EP01', 'Image', 'S41')))).toContain('S41_0030_v1.png')
     let shot = store.getSequence('S41')!.shots.find((x) => x.no === '0030')!
     expect(shot.panels[0].versions.image).toHaveLength(1)
@@ -533,6 +577,65 @@ describe('image stage (콘티 → 최종 이미지)', () => {
     shot = store.getSequence('S41')!.shots.find((x) => x.no === '0030')!
     expect(shot.panels[0].versions.conti.map((v) => v.n)).toEqual([1, 2])
     expect(shot.stages.image.status).toBe('stale')
+  })
+})
+
+describe('GenConti2Img vision analysis (fake AI)', () => {
+  async function withConti(name: string) {
+    const { root, store } = await makeProject(name)
+    await addView(store, 'EP01', 'c1', 'sheet', 'EP01/character/char/해수_Character_sheet_v1.png')
+    for (const no of ['0020', '0030']) {
+      const seq = store.getSequence('S41')!
+      const shot = seq.shots.find((x) => x.no === no)!
+      const rel = `EP01/Conti/S41/S41_${no}_v1.png`
+      await mkdir(join(root, 'EP01/Conti/S41'), { recursive: true })
+      await writeFile(join(root, rel), PNG)
+      const v = { id: `cv-${no}`, n: 1, stage: 'conti' as const, file: rel, source: 'generated' as const, createdAt: 1 }
+      await store.updateShot('S41', shot.id, { panels: [{ id: `p-${no}`, index: 0, annotations: [], versions: { conti: [v], image: [] } }], stages: { ...shot.stages, conti: { ...shot.stages.conti, status: 'review', currentVersionId: v.id } } } as never)
+    }
+    return { root, store }
+  }
+
+  it('one call for unanalyzed shots, saves imageAnalysis + LOCATION MAP, cache hit on second run, re-analyzes after a new conti', async () => {
+    const { store } = await withConti('ana')
+    const calls: Array<{ prompt: string; images: string[] }> = []
+    const runAi: RunAi = async (req) => {
+      calls.push(req)
+      return { data: { shots: [{ no: '0020', shotSize: 'WS', angleEn: 'high angle', expressionEn: '', useConti: true, people: 1 }, { no: '0030', shotSize: 'CU', angleEn: 'low angle', expressionEn: 'jaw set, a held blink', charView: 'back', useConti: false, compositionEn: 'right third, back to camera', people: 1 }], locationMapEn: 'Camera on the road shoulder facing east; truck midground; mudflats background; light from screen left.' } } as never
+    }
+    const shrink = async (f: string) => f
+    const r = await analyzeConti({ store, seq: 'S41', shotNos: ['0010', '0020', '0030'], runAi, shrink })
+    expect(r).toEqual({ analyzed: ['0020', '0030'], locationMap: true })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].images).toHaveLength(3) // 콘티 2 + 해수 시트 1 (중복 없이)
+    expect(calls[0].prompt).toContain('- 0030: storyboard = image 3')
+    expect(calls[0].prompt).toContain('@해수 (character sheet: image 2)')
+    expect(calls[0].prompt).toMatch(/never emotion words/)
+    expect(calls[0].prompt).toMatch(/LOCATION MAP/)
+    const s = store.getSequence('S41')!
+    expect(s.shots.find((x) => x.no === '0030')!.imageAnalysis).toMatchObject({ contiVersionId: 'cv-0030', shotSize: 'CU', charView: 'back', useConti: false, compositionEn: 'right third, back to camera' })
+    expect(s.locationMapEn).toMatch(/road shoulder/)
+    // 캐시: 같은 콘티면 호출 0
+    expect(await analyzeConti({ store, seq: 'S41', shotNos: ['0020', '0030'], runAi, shrink })).toEqual({ analyzed: [], locationMap: false })
+    expect(calls).toHaveLength(1)
+    // 콘티가 바뀌면 그 샷만 다시, LOCATION MAP 은 이미 있으니 안 묻는다
+    const shot = s.shots.find((x) => x.no === '0020')!
+    await store.updateShot('S41', shot.id, { stages: { ...shot.stages, conti: { ...shot.stages.conti, currentVersionId: 'cv-new' } }, panels: [{ ...shot.panels[0], versions: { conti: [...shot.panels[0].versions.conti, { id: 'cv-new', n: 2, stage: 'conti', file: shot.panels[0].versions.conti[0].file, source: 'generated', createdAt: 2 }], image: [] } }] } as never)
+    await analyzeConti({ store, seq: 'S41', shotNos: ['0020', '0030'], runAi, shrink })
+    expect(calls).toHaveLength(2)
+    expect(calls[1].prompt).toContain('- 0020:')
+    expect(calls[1].prompt).not.toContain('- 0030:')
+    expect(calls[1].prompt).not.toMatch(/LOCATION MAP/)
+  })
+
+  it('drift check compares a result with the sheet and summarizes in one line', async () => {
+    const { store } = await withConti('drift')
+    const ok: RunAi = async () => ({ data: { checks: [{ no: '0030', tag: '@해수', ok: true }] } }) as never
+    const bad: RunAi = async () => ({ data: { checks: [{ no: '0030', tag: '@해수', ok: false, issueKo: '헤어가 시트보다 짧다', anchorFixEn: 'shoulder-length black hair tied back' }] } }) as never
+    const results = [{ shotNo: '0030', file: 'EP01/Conti/S41/S41_0030_v1.png' }]
+    expect(await driftCheck({ store, seq: 'S41', results, runAi: ok, shrink: async (f) => f })).toMatch(/^✅ 드리프트 확인 \(기존 이미지 1장 대조, 생성 0장\)/)
+    expect(await driftCheck({ store, seq: 'S41', results, runAi: bad, shrink: async (f) => f })).toMatch(/⚠️ 0030 @해수: 헤어가 시트보다 짧다 → 앵커 제안/)
+    expect(await driftCheck({ store, seq: 'S41', results: [{ shotNo: '0010', file: 'x.png' }], runAi: ok, shrink: async (f) => f })).toBeNull()
   })
 })
 

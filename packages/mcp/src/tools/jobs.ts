@@ -62,11 +62,12 @@ export const paidTools = [
   defineTool({
     name: 'image_generate',
     description:
-      '[유료] 콘티 기반 최종 이미지 생성 요청. 샷의 현재 콘티 이미지를 구도 가이드(레퍼런스 1)로, 에셋 시트를 정체성 레퍼런스로 붙여 프로젝트 최종 룩(project.style.anchorEn)의 스틸을 만든다. 콘티가 없는 샷은 거절된다 — 먼저 conti_generate. 사용자가 콘티를 확인하고 요청할 때만 쓴다. 결과는 stages.image / {EP}/Image/{SEQ}/. 즉시 requestId 반환.',
+      '[유료] 콘티 → 영상용 최종 이미지 (GenConti2Img). 요청하면 앱이 먼저 콘티를 Vision 분석(샷 사이즈·앵글·표정=근육의 일)하고 스킬 템플릿으로 조립한다: 프로젝트 스타일 앵커 + 등장체 시트(샷 사이즈별 뷰) + 배경 + 소품 + 콘티(구도만). 외형·행동·씬 설명은 넣지 않는다. 장소 에셋이 없으면 배경 1장을 먼저 만든다. 콘티 없는 샷은 거절 — 먼저 conti_generate. 사용자가 콘티를 확인하고 요청할 때만. 결과 stages.image / {EP}/Image/{SEQ}/. 즉시 requestId 반환.',
     input: {
       seq: SeqId,
       shots: z.union([z.literal('all'), z.array(ShotNo).min(1)]),
       pilot: z.boolean().optional().describe('1장만 먼저'),
+      model: z.enum(['gpt', 'nano', 'cinema', 'soulcine']).optional().describe('Higgsfield 모델 단축명 (기본 gpt = gpt_image_2_5)'),
       engine: ENGINE,
     },
     handler: (args, ctx) => {

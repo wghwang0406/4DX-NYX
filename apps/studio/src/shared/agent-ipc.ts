@@ -57,6 +57,10 @@ export interface SpendRequestView {
   error?: string
   parentRequestId?: string
   progress?: { total: number; done: number; failed: number }
+  /** 이미지(콘티 → 최종) 요청: 콘티 Vision 분석 상태 (GenConti2Img Step 6) — 끝나야 승인 */
+  analysis?: { state: 'running' | 'done' | 'failed'; analyzed?: number; locationMap?: boolean; error?: string }
+  /** 이미지 배치 뒤 드리프트 확인 한 줄 (Step 9, 생성 0장) */
+  drift?: string
 }
 
 /** 승인 카드를 펼쳤을 때 보여줄 계획 (무료 — 크레딧은 표시하지 않는다) */
@@ -96,8 +100,10 @@ export interface AgentApi {
   interrupt(threadId: string): Promise<void>
   close(threadId: string): Promise<void>
   spendList(): Promise<SpendRequestView[]>
-  spendDecide(requestId: string, decision: 'approved' | 'rejected' | 'pilot', includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex'): Promise<void>
-  spendPreview(requestId: string, includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex'): Promise<SpendPreview>
+  spendDecide(requestId: string, decision: 'approved' | 'rejected' | 'pilot', includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex', model?: string): Promise<void>
+  spendPreview(requestId: string, includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex', model?: string): Promise<SpendPreview>
+  /** 이미지 요청의 콘티 분석 다시 */
+  reanalyze(requestId: string): Promise<void>
   /** UI 버튼에서 유료 요청을 만든다 — 승인 카드가 뜬다 (바로 생성하지 않는다) */
   requestSpend(kind: SpendKindView, args: Record<string, unknown>): Promise<SpendRequestView>
   jobs(requestId?: string): Promise<JobView[]>

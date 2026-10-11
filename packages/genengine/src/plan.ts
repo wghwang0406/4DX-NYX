@@ -1,13 +1,14 @@
 // 승인된 유료 요청 → 작업 계획(JobPlan[]). 프롬프트·모델·파라미터·레퍼런스를 여기서 전부 정한다.
 // 실제 크레딧은 JobService 가 쓴다. 계획 자체는 무료라 승인 카드가 펼쳐 보여줄 수 있다.
-import type { ProjectStore } from '@conti/core'
-import { ASSET_VIEWS, MASTER_VIEW, type Asset, type AssetKind, type Project, type Sequence, type Shot, type VersionSource } from '@conti/domain'
+import { existsSync } from 'node:fs'
+import { absPath, type ProjectStore } from '@conti/core'
+import { ASSET_VIEWS, MASTER_VIEW, PROJECT_DIRS, type Asset, type AssetKind, type Project, type Sequence, type Shot, type VersionSource } from '@conti/domain'
 import { ROUTE, type ModelTable } from './models'
 import { buildContiPrompt, styleLineFor } from './prompts/conti'
 import { charPlatePrompt, charSheetPrompt, locMasterPrompt, locViewPrompt, propPrompt } from './prompts/assets'
 import { restylePrompt, surgicalEditPrompt } from './prompts/edit'
-import { buildShotImagePrompt } from './prompts/image'
-import { currentContiVersion, latestView, pickShotRefs } from './refs'
+import { buildShotImagePrompt, imageViewsForShotSize, type ImageRef } from './prompts/image'
+import { currentContiVersion, latestView, pickShotRefs, pickView } from './refs'
 
 export type SpendKind = 'conti_generate' | 'assets_generate' | 'image_edit' | 'panel_restyle' | 'image_generate'
 
@@ -28,7 +29,13 @@ export interface AssetTarget {
   kind: AssetKind
   view: string
 }
-export type JobTarget = ShotTarget | AssetTarget
+/** 시퀀스 배경 폴백 한 장 (장소 에셋이 없을 때 — GenConti2Img Step 2-C) */
+export interface BackgroundTarget {
+  type: 'background'
+  ep: string
+  seq: string
+}
+export type JobTarget = ShotTarget | AssetTarget | BackgroundTarget
 
 export interface PlanRef {
   file: string // 프로젝트 상대경로
@@ -136,7 +143,7 @@ async function planByKind(ctx: PlanContext, kind: SpendKind, args: Record<string
     case 'panel_restyle':
       return planRestyle(ctx, args as { seq: string; shotNos: string[] })
     case 'image_generate':
-      return planImage(ctx, args as { seq: string; shots: string[]; pilot?: boolean }, decision, opts)
+      return planImage(ctx, args as { seq: string; shots: string[]; pilot?: boolean; model?: string }, decision, opts)
   }
 }
 
@@ -175,8 +182,30 @@ async function planConti(ctx: PlanContext, a: { seq: string; shots: string[]; st
   return { plans, rest, notes }
 }
 
-/** 콘티 → 최종 이미지. 콘티(현재 버전)가 있는 샷만, 레퍼런스 1 = 그 콘티, 나머지 = 샷사이즈별 에셋 시트 뷰. */
-async function planImage(ctx: PlanContext, a: { seq: string; shots: string[]; pilot?: boolean }, decision: 'approved' | 'pilot', opts: PlanOptions): Promise<PlanResult> {
+/** 시퀀스 배경 폴백 파일 (GenConti2Img: {EP}/Image/{SEQ}/{SEQ}_Background.png) */
+export const backgroundFile = (ep: string, seq: string) => `${PROJECT_DIRS.image(ep, seq)}/${seq}_Background.png`
+
+/** 이미지 단계 레퍼런스 — 등장체(샷 사이즈별 뷰, 뒷모습이면 back) → 배경 → 소품. 콘티는 planImage 가 마지막에 붙인다. */
+export function pickImageRefs(shot: Shot, assets: Asset[], size: string | undefined, charView: 'front' | 'back' | undefined, max: number): ImageRef[] {
+  const byTag = new Map(assets.map((x) => [x.tag, x]))
+  const v = imageViewsForShotSize(size, charView)
+  const out: ImageRef[] = []
+  const push = (role: ImageRef['role'], tag: string, want: string) => {
+    const asset = byTag.get(tag)
+    const p = asset ? pickView(asset, want) : undefined
+    if (p) out.push({ role, tag, view: p.view, file: p.version.file, label: `${tag} ${p.view}` })
+  }
+  for (const c of shot.characters) push('char', c, v.char)
+  if (shot.location) push('loc', shot.location, v.loc)
+  for (const p of shot.props) push('prop', p, v.prop)
+  return out.slice(0, Math.max(0, max))
+}
+
+/**
+ * 콘티 → 영상용 최종 이미지 (GenConti2Img). 콘티(현재 버전)가 있는 샷만.
+ * 분석(샷 사이즈·앵글·표정, 콘티 사용 여부)은 앱이 미리 `shot.imageAnalysis` 에 넣어 둔다 — 없거나 낡았으면 샷 표 값으로 폴백 + 경고.
+ */
+async function planImage(ctx: PlanContext, a: { seq: string; shots: string[]; pilot?: boolean; model?: string }, decision: 'approved' | 'pilot', opts: PlanOptions): Promise<PlanResult> {
   const project = ctx.store.getProject()
   const seq = requireSeq(ctx.store, a.seq)
   const assets = (await ctx.store.listAssets(seq.ep)).assets
@@ -191,29 +220,72 @@ async function planImage(ctx: PlanContext, a: { seq: string; shots: string[]; pi
   const pilot = decision === 'pilot' || !!a.pilot
   let rest: PlanResult['rest']
   if (pilot && nos.length > 1) {
-    rest = { args: { seq: a.seq, shots: nos.slice(1), pilot: false }, count: nos.length - 1 }
+    rest = { args: { seq: a.seq, shots: nos.slice(1), pilot: false, ...(a.model ? { model: a.model } : {}) }, count: nos.length - 1 }
     nos = nos.slice(0, 1)
   }
-  const model = ROUTE.image
-  const plans: JobPlan[] = nos.map((no) => {
+  // 모델 단축명 gpt(기본, = gpt_image_2_5) / nano / cinema / soulcine
+  const model = a.model ? ctx.models.resolve(a.model) : ROUTE.image
+  const plans: JobPlan[] = []
+  const unanalyzed: string[] = []
+  let bgIdx: number | undefined
+  const bgRel = backgroundFile(seq.ep, seq.seq)
+  for (const no of nos) {
     const shot = liveShots(seq).find((s) => s.no === no)!
     const conti = currentContiVersion(shot)!
-    const refs = pickShotRefs(shot, assets, ctx.models.maxImages(model) - 1)
-    const built = buildShotImagePrompt({ project, sequence: seq, shot, assets, refs })
-    return {
+    const an = shot.imageAnalysis?.contiVersionId === conti.id ? shot.imageAnalysis : undefined
+    if (!an) unanalyzed.push(no)
+    const useConti = an?.useConti ?? true
+    const refs = pickImageRefs(shot, assets, an?.shotSize ?? shot.sizeCode, an?.charView, ctx.models.maxImages(model) - (useConti ? 2 : 1))
+    // 배경: 장소 에셋이 없으면 시퀀스 배경 폴백 (있으면 그 파일, 없으면 한 장 먼저 만든다)
+    let dependsOn: number | undefined
+    if (!refs.some((r) => r.role === 'loc')) {
+      if (existsSync(absPath(ctx.store.root, bgRel))) refs.push({ role: 'background', file: bgRel, label: `${seq.seq} 배경` })
+      else {
+        if (bgIdx === undefined) {
+          bgIdx = plans.length
+          plans.push(backgroundPlan(ctx, project, seq))
+          notes.push(`장소 에셋이 없어 ${seq.seq} 배경 한 장을 먼저 만듭니다 (Soul Cinema) — Assets 에서 장소 4뷰를 만들면 샷 사이즈에 맞는 뷰가 자동으로 붙습니다`)
+        }
+        dependsOn = bgIdx
+      }
+    }
+    if (useConti) refs.push({ role: 'conti', file: conti.file, label: `${shot.no} 콘티 v${conti.n}` })
+    const promptRefs: ImageRef[] = dependsOn !== undefined ? [{ role: 'background', file: '(배경 작업 결과)', label: `${seq.seq} 배경` }, ...refs] : refs
+    const built = buildShotImagePrompt({ project, shot, assets, refs: promptRefs, analysis: an })
+    const missingChar = shot.characters.filter((t) => !refs.some((r) => r.role === 'char' && r.tag === t))
+    plans.push({
       kind: 'image_generate',
       target: { type: 'shot', ep: seq.ep, seq: seq.seq, shotId: shot.id, shotNo: shot.no, stage: 'image' },
       model,
       params: imageParams(ctx.models, model, project),
       prompt: built.text,
-      refs: [{ file: conti.file, label: `${shot.no} 콘티 v${conti.n}` }, ...refs.map((r) => ({ file: r.file, label: `${r.tag} ${r.view}` }))],
+      refs: refs.map((r) => ({ file: r.file, label: r.label })),
+      dependsOn,
       source: 'generated',
       parentVersionId: conti.id,
-      lint: built.warnings,
+      lint: [...built.warnings, ...missingChar.map((t) => `${t} 시트가 없어 인물 일관성이 흔들릴 수 있습니다 — Assets 에서 생성`)],
       style: 'cinematic',
-    }
-  })
+    })
+  }
+  if (unanalyzed.length) notes.push(`콘티 분석 없이 샷 표 값으로 만듭니다: ${unanalyzed.join(', ')}`)
   return { plans, rest, notes }
+}
+
+/** 배경 폴백 — Lira Location 템플릿, 인물 없음은 긍정문으로. LOCATION MAP(영문) > 씬 헤딩. */
+function backgroundPlan(ctx: PlanContext, project: Project, seq: Sequence): JobPlan {
+  const model = 'soul_cinematic'
+  const pseudo = { tag: `@bg_${seq.seq}`, kind: 'loc', nameKo: seq.headingKo, descriptionKo: seq.headingKo, anchorEn: seq.locationMapEn, state: 'base', views: {}, usedIn: [] } as unknown as Asset
+  const built = locMasterPrompt(pseudo, project)
+  return {
+    kind: 'image_generate',
+    target: { type: 'background', ep: seq.ep, seq: seq.seq },
+    model,
+    params: imageParams(ctx.models, model, project, '16:9', '2k'),
+    prompt: built.text,
+    refs: [],
+    source: 'generated',
+    lint: built.warnings,
+  }
 }
 
 async function planAssets(ctx: PlanContext, a: { ep: string; ids: string[]; views?: string[] }): Promise<PlanResult> {

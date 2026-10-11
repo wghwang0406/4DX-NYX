@@ -11,7 +11,7 @@ import { CliError, remoteState, type CliParams, type HiggsfieldCli } from './cli
 import { downloadTo, imageDims, type FetchLike } from './download'
 import type { CodexImageRunner } from './codex-image'
 import { UploadCache } from './uploads'
-import type { JobPlan, JobTarget, SpendKind } from './plan'
+import { backgroundFile, type JobPlan, type JobTarget, type SpendKind } from './plan'
 
 export const JobStatus = z.enum(['queued', 'uploading', 'submitting', 'submitted', 'running', 'downloading', 'done', 'failed', 'cancelled', 'unknown'])
 export type JobStatus = z.infer<typeof JobStatus>
@@ -433,6 +433,7 @@ export class JobService {
       const n = await nextFree(absPath(this.root, dir), recorded + 1, (v) => shotFileName({ seq: t.seq, shot: t.shotNo, v, ext }))
       return { rel: `${dir}/${shotFileName({ seq: t.seq, shot: t.shotNo, v: n, ext })}`, n }
     }
+    if (j.target.type === 'background') return { rel: backgroundFile(j.target.ep, j.target.seq), n: 1 }
     const t = j.target
     const asset = (await this.o.store.listAssets(t.ep)).assets.find((a) => a.id === t.assetId)
     const recorded = Math.max(0, ...(asset?.views[t.view]?.map((v) => v.n) ?? []))
@@ -458,6 +459,8 @@ export class JobService {
       await this.o.store.updateShot(t.seq, t.shotId, { panels, stages })
       return
     }
+    // 배경 폴백은 파일만 (기록은 작업 기록으로 충분 — 다음 계획이 파일 존재로 판단)
+    if (j.target.type === 'background') return
     const t = j.target
     const ea = await this.o.store.listAssets(t.ep)
     const asset = ea.assets.find((a) => a.id === t.assetId)

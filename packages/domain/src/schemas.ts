@@ -107,6 +107,20 @@ export const Shot = z.object({
   review: z.array(ReviewFlag).default([]),
   // 콘티 프롬프트 슬롯 (AI 가 채움, 코드가 조립). 바뀌면 stages.conti 가 stale 이 된다
   promptSlots: z.record(z.string(), z.string()).optional(),
+  // 콘티 → 최종 이미지(GenConti2Img Step 6) 콘티 Vision 분석 결과. 분석한 콘티 버전이 바뀌면 다시 분석한다.
+  imageAnalysis: z
+    .object({
+      contiVersionId: z.string(),
+      shotSize: z.string(), // EWS/WS/MWS/MS/OTS/MCU/CU/ECU — 레퍼런스 뷰 선택 근거
+      angleEn: z.string(), // eye-level / low angle / high angle / OTS …
+      expressionEn: z.string().default(''), // 근육의 일 (감정어 금지)
+      charView: z.enum(['front', 'back']).optional(), // 뒷모습 샷이면 back
+      useConti: z.boolean().default(true), // 콘티 캐릭터가 시트와 크게 다르면 false → 구도를 글로
+      compositionEn: z.string().optional(),
+      people: z.number().int().min(0).optional(),
+      at: z.number(),
+    })
+    .optional(),
   panels: z.array(Panel).default([]),
   stages: z
     .object({

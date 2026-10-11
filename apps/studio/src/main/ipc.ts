@@ -392,8 +392,9 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
   ipcMain.handle('agent:interrupt', (_e, id: string) => requireHost().interrupt(id))
   ipcMain.handle('agent:close', (_e, id: string) => requireHost().close(id))
   ipcMain.handle('agent:spendList', () => requireHost().spendList())
-  ipcMain.handle('agent:spendDecide', (_e, id: string, d, n, engine) => requireHost().spendDecide(id, d, n, engine))
-  ipcMain.handle('agent:spendPreview', (_e, id: string, n, engine) => requireHost().spendPreview(id, n, engine))
+  ipcMain.handle('agent:spendDecide', (_e, id: string, d, n, engine, model) => requireHost().spendDecide(id, d, n, engine, model))
+  ipcMain.handle('agent:spendPreview', (_e, id: string, n, engine, model) => requireHost().spendPreview(id, n, engine, model))
+  ipcMain.handle('agent:reanalyze', (_e, id: string) => requireHost().reanalyze(id))
   ipcMain.handle('agent:requestSpend', (_e, kind, args) => requireHost().requestSpend(kind, args))
   ipcMain.handle('agent:jobs', (_e, requestId) => requireHost().jobs(requestId))
   ipcMain.handle('agent:jobResubmit', (_e, id: string) => requireHost().jobResubmit(id))
@@ -499,10 +500,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
         before.afterLogin = await js(`({ gptEnabled: !!document.querySelector('[data-testid=engine-switch] [data-engine=codex]:not([disabled])'), loginRow: !!document.querySelector('[data-testid=codex-login-row]') })`)
         await js(`document.querySelector('[data-testid=engine-switch] [data-engine=${engine ?? 'codex'}]').click()`)
         await new Promise((r) => setTimeout(r, 700))
-        const card = await js(`(() => { const sw = document.querySelector('[data-testid=engine-switch]'); return { active: sw?.querySelector('.border-accent')?.textContent, text: sw?.closest('.rounded-lg')?.innerText.slice(0, 200) } })()`)
+        // 이미지 요청은 콘티 분석이 끝나야 승인이 열린다
+        for (let i = 0; i < 80 && (await js(`document.querySelector('[data-testid=analysis-status]')?.textContent?.includes('분석 중') ?? false`)); i++) await sleep(250)
+        before.analysis = await js(`document.querySelector('[data-testid=analysis-status]')?.textContent ?? null`)
+        const card = await js(`(() => { const sw = document.querySelector('[data-testid=engine-switch]'); return { active: sw?.querySelector('.border-accent')?.textContent, text: sw?.closest('.rounded-lg')?.innerText.slice(0, 300) } })()`)
         if (process.env.CONTI_E2E_SHOTDIR) await writeFile(join(process.env.CONTI_E2E_SHOTDIR, 'card_engine.png'), (await win.webContents.capturePage()).toPNG())
         await js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '승인')?.click()`)
         const jobs = await waitAll(req.requestId)
+        // 이미지 배치 뒤 드리프트 확인 줄
+        for (let i = 0; i < 40 && kind === 'image' && !h.spendList().find((r) => r.requestId === req.requestId)?.drift; i++) await sleep(250)
+        await sleep(400)
+        if (process.env.CONTI_E2E_SHOTDIR) await writeFile(join(process.env.CONTI_E2E_SHOTDIR, 'card_done.png'), (await win.webContents.capturePage()).toPNG())
         return { login: before, card, request: h.spendList().find((r) => r.requestId === req.requestId), jobs, shots: dump() }
       }
       const preview = await h.spendPreview(req.requestId, undefined, engine)
