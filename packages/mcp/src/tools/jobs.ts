@@ -5,6 +5,12 @@ import type { SpendKind } from '../spend'
 import { ToolError, ok } from '../util'
 import { requireSequence } from './sequence'
 
+/** 모든 유료 도구 공통 선택 인자 — 이미지 엔진. 생략하면 프로젝트 기본값. 사용자가 "GPT 로", "Codex 로" 라고 하면 'codex'. */
+const ENGINE = z
+  .enum(['higgsfield', 'codex'])
+  .optional()
+  .describe("이미지 엔진. 'codex' = 사용자가 로그인한 Codex(ChatGPT)의 GPT 이미지(Higgsfield 크레딧 안 씀, 모든 kind 에 쓸 수 있음). 생략하면 프로젝트 기본값. 사용자가 카드에서 바꿀 수도 있다.")
+
 const NOTE = '승인 대기 — UI 승인 카드. 크레딧 이야기는 하지 말고, 카드에서 [승인]/[1장만 먼저]/[거절]을 고르라고 안내한다.'
 
 /** 유료 도구 공통: 요청만 만들고 즉시 돌려준다 (블로킹 안 함). 실제 생성은 승인 뒤 JobService. */
@@ -36,6 +42,7 @@ export const paidTools = [
       shots: z.union([z.literal('all'), z.array(ShotNo).min(1)]),
       style: z.enum(['sketch', 'cinematic']),
       pilot: z.boolean().optional().describe('1장만 먼저'),
+      engine: ENGINE,
     },
     handler: (args, ctx) => {
       const s = requireSequence(ctx, args.seq)
@@ -55,8 +62,8 @@ export const paidTools = [
   defineTool({
     name: 'assets_generate',
     description:
-      '[유료] 에셋 시트/뷰 생성 요청. char = 3패널 시트(sheet) + 파생 front/back/face, loc = wide 정본 + 34/top/detail 뷰 변경, prop = top/34/detail. views 로 일부만. 프롬프트는 앱이 에셋 필드 + Lira 템플릿으로 조립한다. 즉시 requestId 반환.',
-    input: { ep: EpId, ids: z.array(z.string()).optional(), tags: z.array(z.string()).optional(), views: z.array(z.string()).optional() },
+      '[유료] 에셋 시트/뷰 생성 요청. 기본 모델은 인물 soul / 장소 soulcine / 소품 nano 지만 engine=codex 면 전부 GPT(Codex) 로 만든다. char = 3패널 시트(sheet) + 파생 front/back/face, loc = wide 정본 + 34/top/detail 뷰 변경, prop = top/34/detail. views 로 일부만. 프롬프트는 앱이 에셋 필드 + Lira 템플릿으로 조립한다. 즉시 requestId 반환.',
+    input: { ep: EpId, ids: z.array(z.string()).optional(), tags: z.array(z.string()).optional(), views: z.array(z.string()).optional(), engine: ENGINE },
     handler: async (rawArgs, ctx) => {
       const ids = [...(rawArgs.ids ?? []), ...(rawArgs.tags ?? [])]
       if (!ids.length) throw new ToolError('ids 또는 tags 가 필요합니다')
@@ -72,7 +79,7 @@ export const paidTools = [
   defineTool({
     name: 'image_edit',
     description: '[유료] 샷의 현재 콘티 이미지를 국소 편집한다 (기본 nano_banana_2, Lira surgical-edit 템플릿: 최소 CHANGE / 상세 PRESERVE). instructionEn 은 바꿀 한 가지만 영문으로. 새 버전이 생기고 이전 버전은 기록에 남는다. 즉시 requestId 반환.',
-    input: { seq: SeqId, shotNo: ShotNo, instructionEn: z.string().min(1), model: z.string().optional() },
+    input: { seq: SeqId, shotNo: ShotNo, instructionEn: z.string().min(1), model: z.string().optional(), engine: ENGINE },
     handler: (args, ctx) => {
       const s = requireSequence(ctx, args.seq)
       const sh = s.shots.find((x) => !x.deleted && x.no === args.shotNo)
@@ -84,7 +91,7 @@ export const paidTools = [
   defineTool({
     name: 'panel_restyle',
     description: '[유료] 영상 원본 프레임 등 현재 콘티 이미지를 프로젝트 콘티 그림체로 다시 그린다 (구도 유지). 즉시 requestId 반환.',
-    input: { seq: SeqId, shotNos: z.array(ShotNo).min(1) },
+    input: { seq: SeqId, shotNos: z.array(ShotNo).min(1), engine: ENGINE },
     handler: (args, ctx) => {
       const s = requireSequence(ctx, args.seq)
       const live = s.shots.filter((sh) => !sh.deleted)

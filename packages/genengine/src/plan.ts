@@ -45,6 +45,8 @@ export interface JobPlan {
   parentVersionId?: string
   lint: string[]
   style?: 'sketch' | 'cinematic'
+  /** 'codex' = 로그인한 Codex 의 GPT 이미지로 만든다 (Higgsfield 아님) */
+  engine?: 'higgsfield' | 'codex'
 }
 
 export interface PlanResult {
@@ -92,7 +94,35 @@ export function expandNeighbors(seq: Sequence, nos: string[]): string[] {
   return live.filter((n) => set.has(n))
 }
 
+/** 이 요청이 쓸 이미지 엔진: 요청 인자(engine) > 프로젝트 기본값 > higgsfield */
+export function engineFor(ctx: PlanContext, args: Record<string, unknown>): 'higgsfield' | 'codex' {
+  const e = args.engine ?? ctx.store.getProject().defaults.imageEngine
+  return e === 'codex' ? 'codex' : 'higgsfield'
+}
+
 export async function planRequest(ctx: PlanContext, kind: SpendKind, args: Record<string, unknown>, decision: 'approved' | 'pilot', opts: PlanOptions = {}): Promise<PlanResult> {
+  const r = await planByKind(ctx, kind, args, decision, opts)
+  const engine = engineFor(ctx, args)
+  // 파일럿 후속 카드도 같은 엔진으로
+  if (r.rest) r.rest.args = { ...r.rest.args, engine }
+  if (engine !== 'codex') return r
+  return { ...r, plans: r.plans.map(toCodexPlan), notes: [...r.notes, ...codexNotes(r.plans)] }
+}
+
+/** GPT(Codex) 엔진: 프롬프트·레퍼런스·체인은 그대로, 모델은 codex_image, 플랫폼 파라미터는 비율만. */
+export function toCodexPlan(p: JobPlan): JobPlan {
+  return { ...p, engine: 'codex', model: CODEX_IMAGE_MODEL, params: { aspect_ratio: p.params.aspect_ratio ?? '16:9' } }
+}
+
+function codexNotes(plans: JobPlan[]): string[] {
+  const notes = ['GPT(Codex) 로 생성 — Higgsfield 크레딧을 쓰지 않고 Codex(ChatGPT) 사용량을 씁니다. 한 장에 1–2분']
+  if (plans.some((p) => p.params.custom_reference_id)) notes.push('Soul ID 는 Soul 계열 모델에만 있어 GPT 에서는 쓰지 않습니다 — 시트 레퍼런스·외형 설명으로 정체성을 맞춥니다')
+  return notes
+}
+
+export const CODEX_IMAGE_MODEL = 'codex_image'
+
+async function planByKind(ctx: PlanContext, kind: SpendKind, args: Record<string, unknown>, decision: 'approved' | 'pilot', opts: PlanOptions): Promise<PlanResult> {
   switch (kind) {
     case 'conti_generate':
       return planConti(ctx, args as { seq: string; shots: string[]; style: 'sketch' | 'cinematic'; pilot?: boolean }, decision, opts)

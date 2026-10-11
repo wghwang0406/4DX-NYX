@@ -15,12 +15,14 @@ import { buildContiPrompt, parseTags } from './prompts/conti'
 import { charSheetPrompt, locViewPrompt, propPrompt } from './prompts/assets'
 import { surgicalEditPrompt, restylePrompt } from './prompts/edit'
 import { pickShotRefs } from './refs'
-import { expandNeighbors, planRequest } from './plan'
+import { CODEX_IMAGE_MODEL, engineFor, expandNeighbors, planRequest } from './plan'
+import { RealCodexImage, codexImageInstruction, classifyCodexError, type CodexImageRunner } from './codex-image'
 import { JobCapError, JobService, type JobEvent } from './jobs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const BUNDLE = join(here, '..', '..', '..', 'agent-bundle')
 const FAKE = join(here, '..', 'test', 'fake-higgsfield.mjs')
+const FAKE_CODEX = join(here, '..', 'test', 'fake-codex.mjs')
 // 1x1 PNG + 64 바이트 패딩(다운로더 최소 크기)
 const PNG = Buffer.concat([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'), Buffer.alloc(64)])
 
@@ -265,7 +267,7 @@ describe('planner', () => {
     const r = await planRequest({ store, models }, 'conti_generate', { seq: 'S41', shots: ['0020', '0030'], style: 'sketch' }, 'pilot', { includeNeighbors: true })
     expect(r.plans).toHaveLength(1)
     expect(r.plans[0].target).toMatchObject({ type: 'shot', shotNo: '0010' })
-    expect(r.rest).toEqual({ args: { seq: 'S41', shots: ['0020', '0030', '0040'], style: 'sketch', pilot: false }, count: 3 })
+    expect(r.rest).toEqual({ args: { seq: 'S41', shots: ['0020', '0030', '0040'], style: 'sketch', pilot: false, engine: 'higgsfield' }, count: 3 })
     const full = await planRequest({ store, models }, 'conti_generate', { seq: 'S41', shots: ['0020'], style: 'cinematic' }, 'approved')
     expect(full.plans[0]).toMatchObject({ model: 'gpt_image_2_5', params: { aspect_ratio: '16:9', quality: 'high', resolution: '2k' }, style: 'cinematic', source: 'generated' })
     expect(full.plans[0].refs).toEqual([{ file: 'EP01/character/char/해수_Character_front_v1.png', label: '@해수 front' }])
@@ -465,6 +467,130 @@ describe('JobService (fake CLI, zero credits)', () => {
     const w = await svc.waitRequest('req-l', 10_000)
     expect(w.jobs[0].outFile).toBe('EP01/Conti/S41/S41_0010_v3.png')
     expect(store.getSequence('S41')!.shots[0].panels[0].versions.conti[0].n).toBe(3)
+  })
+})
+
+describe('GPT (Codex) engine', () => {
+  async function codexBin(dir: string) {
+    const sh = join(dir, 'codex')
+    await writeFile(sh, `#!/bin/sh\nexec "${process.execPath}" "${FAKE_CODEX}" "$@"\n`)
+    await chmod(sh, 0o755)
+    return sh
+  }
+  async function setupCodex(name: string, env: Record<string, string> = {}) {
+    const { root, store } = await makeProject(name)
+    const dir = await mkdtemp(join(tmpdir(), 'fakecx-'))
+    const home = join(dir, 'home')
+    const log = join(dir, 'calls.log')
+    const codex = new RealCodexImage({ bin: await codexBin(dir), codexHome: home, env: { ...process.env, CODEX_HOME: home, FAKE_CODEX_LOG: log, ...env }, timeoutMs: 20_000 })
+    const fakeDir = await mkdtemp(join(tmpdir(), 'fakehf-'))
+    const cli = new RealHiggsfieldCli({ bin: await fakeBin(fakeDir), env: { ...process.env, FAKE_HF_DIR: fakeDir, FAKE_HF_URL: httpUrl } })
+    const svc = new JobService({ store, cli, codex, pollMs: 30 })
+    await svc.init()
+    return { root, store, svc, home, log, fakeDir }
+  }
+
+  it('plans: engine=codex keeps prompts, refs and chain, swaps model and params', async () => {
+    const { store } = await makeProject('cx-plan')
+    await store.upsertAsset('EP01', { ...(await store.listAssets('EP01')).assets.find((a) => a.id === 'c1')!, soul: { id: 'soul-123', model: 'text2image_soul_v2', status: 'ready' } } as Asset)
+    const hf = await planRequest({ store, models }, 'assets_generate', { ep: 'EP01', ids: ['@해수'] }, 'approved')
+    const cx = await planRequest({ store, models }, 'assets_generate', { ep: 'EP01', ids: ['@해수'], engine: 'codex' }, 'approved')
+    expect(hf.plans[0].model).toBe('text2image_soul_v2')
+    expect(cx.plans.map((p) => p.model)).toEqual(Array(4).fill(CODEX_IMAGE_MODEL))
+    expect(cx.plans.every((p) => p.engine === 'codex' && Object.keys(p.params).join() === 'aspect_ratio')).toBe(true)
+    expect(cx.plans.map((p) => p.prompt)).toEqual(hf.plans.map((p) => p.prompt))
+    expect(cx.plans.map((p) => p.dependsOn)).toEqual(hf.plans.map((p) => p.dependsOn))
+    expect(cx.notes.join('\n')).toMatch(/GPT\(Codex\)/)
+    expect(cx.notes.join('\n')).toMatch(/Soul ID/)
+    // 프로젝트 기본값 → 인자 없이도 codex, 인자가 이긴다
+    await store.updateProject({ defaults: { ...store.getProject().defaults, imageEngine: 'codex' } })
+    expect(engineFor({ store, models }, {})).toBe('codex')
+    expect(engineFor({ store, models }, { engine: 'higgsfield' })).toBe('higgsfield')
+    // 파일럿 후속도 같은 엔진
+    const pilot = await planRequest({ store, models }, 'conti_generate', { seq: 'S41', shots: ['0010', '0020'], style: 'sketch' }, 'pilot')
+    expect(pilot.plans[0].engine).toBe('codex')
+    expect(pilot.rest?.args.engine).toBe('codex')
+  })
+
+  it('instruction carries aspect, refs and the verbatim prompt; errors classify', () => {
+    const t = codexImageInstruction({ prompt: 'A pencil storyboard frame.', refs: ['/p/a.png'], aspect: '16:9' })
+    expect(t).toMatch(/exactly ONE image, wide landscape 16:9/)
+    expect(t).toContain('referenced_image_paths')
+    expect(t).toContain('["/p/a.png"]')
+    expect(t).toContain('<<<\nA pencil storyboard frame.\n>>>')
+    expect(classifyCodexError('unexpected status 401 Unauthorized')).toBe('auth')
+    expect(classifyCodexError("You've hit your usage limit")).toBe('usage_limit')
+  })
+
+  it('asset chain via fake codex: sheet → plates with the sheet as referenced path, versions, no Higgsfield calls', async () => {
+    const { root, store, svc, log, fakeDir } = await setupCodex('cx-chain')
+    const r = await planRequest({ store, models }, 'assets_generate', { ep: 'EP01', ids: ['@해수'], engine: 'codex' }, 'approved')
+    await svc.submit('req-cx', r.plans)
+    const w = await svc.waitRequest('req-cx', 20_000)
+    expect(w.jobs.map((j) => j.status)).toEqual(['done', 'done', 'done', 'done'])
+    expect(w.jobs.every((j) => j.engine === 'codex' && /^codex:[0-9a-f-]{36}$/.test(j.remote?.jobId ?? ''))).toBe(true)
+    const files = (await readdir(join(root, 'EP01', 'character', 'char'))).sort()
+    expect(files).toEqual(['해수_Character_back_v1.png', '해수_Character_face_v1.png', '해수_Character_front_v1.png', '해수_Character_sheet_v1.png'])
+    const a = (await store.listAssets('EP01')).assets.find((x) => x.id === 'c1')!
+    expect(a.views.sheet[0]).toMatchObject({ w: 336, h: 189, source: 'generated' })
+    const calls = (await readFile(log, 'utf8')).trim().split('\n').map((l) => JSON.parse(l))
+    expect(calls).toHaveLength(4)
+    expect(calls[0].args).toEqual(expect.arrayContaining(['exec', '--json', '-s', 'read-only', '-c', 'features.image_generation=true']))
+    expect(calls[0].stdin).not.toContain('referenced_image_paths')
+    expect(calls[1].stdin).toContain(join(root, 'EP01/character/char/해수_Character_sheet_v1.png'))
+    await expect(readFile(join(fakeDir, 'calls.log'), 'utf8')).rejects.toThrow()
+  })
+
+  it('login missing → job fails with a Korean hint; usage limit too', async () => {
+    const a = await setupCodex('cx-auth', { FAKE_CODEX_FAIL: 'auth' })
+    const r = await planRequest({ store: a.store, models }, 'conti_generate', { seq: 'S41', shots: ['0010'], style: 'sketch', engine: 'codex' }, 'approved')
+    await a.svc.submit('req-auth', r.plans)
+    const w = await a.svc.waitRequest('req-auth', 10_000)
+    expect(w.jobs[0].status).toBe('failed')
+    expect(w.jobs[0].error).toMatch(/Codex 로그인이 필요합니다/)
+    expect(a.store.getSequence('S41')!.shots[0].stages.conti.status).toBe('failed')
+    const b = await setupCodex('cx-usage', { FAKE_CODEX_FAIL: 'usage' })
+    const r2 = await planRequest({ store: b.store, models }, 'conti_generate', { seq: 'S41', shots: ['0010'], style: 'sketch', engine: 'codex' }, 'approved')
+    await b.svc.submit('req-u', r2.plans)
+    expect((await b.svc.waitRequest('req-u', 10_000)).jobs[0].error).toMatch(/사용 한도/)
+  })
+
+  it('restart recovers a finished codex image from the thread folder; concurrency stays ≤ 2', async () => {
+    const { store } = await makeProject('cx-recover')
+    const home = await mkdtemp(join(tmpdir(), 'cxhome-'))
+    const cli = {} as never
+    let live = 0
+    let peak = 0
+    const hang: CodexImageRunner = {
+      generate: (rq) => {
+        live++
+        peak = Math.max(peak, live)
+        rq.onThread?.(`T-${live}-${Math.random().toString(36).slice(2, 8)}`)
+        return new Promise(() => {})
+      },
+      recover: async () => null,
+    }
+    const svcA = new JobService({ store, cli, codex: hang })
+    await svcA.init()
+    const r = await planRequest({ store, models }, 'conti_generate', { seq: 'S41', shots: ['0010', '0020', '0030'], style: 'sketch', engine: 'codex' }, 'approved')
+    await svcA.submit('req-rc', r.plans)
+    await new Promise((res) => setTimeout(res, 300))
+    expect(peak).toBe(2)
+    const running = svcA.list('req-rc').filter((j) => j.remote?.jobId)
+    expect(running).toHaveLength(2)
+    expect(store.getSequence('S41')!.shots[0].stages.conti.status).toBe('running')
+    await svcA.stop()
+    // 앱 재시작: 첫 작업의 결과만 폴더에 있다
+    const t1 = running[0].remote!.jobId.slice(6)
+    await mkdir(join(home, 'generated_images', t1), { recursive: true })
+    await writeFile(join(home, 'generated_images', t1, 'exec-x.png'), PNG)
+    const real = new RealCodexImage({ codexHome: home })
+    const svcB = new JobService({ store, cli, codex: { generate: hang.generate, recover: (t) => real.recover(t) } })
+    await svcB.init()
+    const after = svcB.list('req-rc')
+    expect(after.find((j) => j.id === running[0].id)!.status).toBe('done')
+    expect(after.find((j) => j.id === running[1].id)!.status).toBe('unknown')
+    expect(store.getSequence('S41')!.shots[0].panels[0].versions.conti[0].file).toBe('EP01/Conti/S41/S41_0010_v1.png')
   })
 })
 

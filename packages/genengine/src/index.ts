@@ -8,5 +8,6 @@ export { buildContiPrompt, styleLineFor, parseTags, DEFAULT_SKETCH_STYLE, DEFAUL
 export { charSheetPrompt, charPlatePrompt, locMasterPrompt, locViewPrompt, propPrompt } from './prompts/assets'
 export { surgicalEditPrompt, restylePrompt } from './prompts/edit'
 export { latestView, pickView, pickShotRefs, currentContiVersion } from './refs'
-export { planRequest, expandNeighbors, PlanError, type JobPlan, type PlanResult, type PlanContext, type PlanOptions, type JobTarget, type ShotTarget, type AssetTarget, type PlanRef, type SpendKind } from './plan'
+export { planRequest, engineFor, toCodexPlan, CODEX_IMAGE_MODEL, expandNeighbors, PlanError, type JobPlan, type PlanResult, type PlanContext, type PlanOptions, type JobTarget, type ShotTarget, type AssetTarget, type PlanRef, type SpendKind } from './plan'
 export { JobService, JobCapError, JobRecord, JobStatus, TERMINAL, type JobEvent, type JobServiceOptions } from './jobs'
+export { RealCodexImage, CodexImageError, codexImageInstruction, classifyCodexError, type CodexImageRunner, type CodexImageRequest } from './codex-image'

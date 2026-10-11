@@ -143,6 +143,33 @@ function createWindow(): BrowserWindow {
           const made = seqs.map((q) => ipcHandle!.storeSnapshot(q)).filter(Boolean)
           r.made = made.map((m) => ({ seq: m!.seq, lines: [m!.source?.lineStart, m!.source?.lineEnd] }))
           r.total = (await ipcHandle!.sequenceCount?.()) ?? null
+          // 목록 유지: 표가 그대로 있고 만든 씬(합친 씬 포함)은 표시된다
+          r.afterCommit = await js(`({
+            table: !!document.querySelector('[data-testid=import-commit]'),
+            banner: document.querySelector('[data-testid=made-banner]')?.textContent?.slice(0, 40) ?? null,
+            madeRows: [...document.querySelectorAll('tr[data-made]')].map(tr => tr.dataset.row + ':' + tr.dataset.made),
+            count: document.querySelector('[data-testid=import-count]')?.textContent,
+          })`)
+          if (process.env.CONTI_E2E_SHOTDIR) await writeFile(join(process.env.CONTI_E2E_SHOTDIR, 'import_after_commit.png'), (await win.webContents.capturePage()).toPNG())
+          // 다른 화면에 갔다 오면 다시 열린다
+          await js(`[...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'Shots')?.click()`)
+          await wait(500)
+          await js(`[...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'Sources')?.click()`)
+          for (let i = 0; i < 40 && !(await js(`!!document.querySelector('tr[data-made]')`)); i++) await wait(250)
+          r.reopened = await js(`({ madeRows: document.querySelectorAll('tr[data-made]').length, checked: [...document.querySelectorAll('tbody tr input[type=checkbox]')].filter(c => c.checked).length })`)
+          // 두 번째: 남은 씬 중 6·7 번 행만 만든다
+          await box(6)
+          await box(7)
+          await wait(150)
+          r.second = { button: await commitText() }
+          await js(`document.querySelector('[data-testid=import-commit]').click()`)
+          for (let i = 0; i < 40 && (await js(`document.querySelectorAll('tr[data-made]').length`)) < 7; i++) await wait(250)
+          r.totalAfterSecond = (await ipcHandle!.sequenceCount?.()) ?? null
+          r.madeAfterSecond = await js(`document.querySelectorAll('tr[data-made]').length`)
+          // 표를 닫으면 가져온 시나리오 목록
+          await js(`document.querySelector('[data-testid=import-close]').click()`)
+          await wait(400)
+          r.sourceList = await js(`document.querySelector('[data-testid=source-list]')?.innerText.slice(0, 120) ?? null`)
         } catch (e) {
           r.error = String((e as Error).stack ?? e)
         }

@@ -1,13 +1,26 @@
-import { useMemo, useRef, useState } from 'react'
-import { FileText, Upload, Film, CornerLeftUp } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { FileText, Upload, Film, CornerLeftUp, CheckCircle2, X, Loader2 } from 'lucide-react'
 import { buildImportPicks, canMerge, duplicateSeqs, type SceneRowPick } from '@conti/domain'
 import VideoImport from '../components/VideoImport'
-import type { ImportPreview } from '../../../shared/ipc'
+import type { ImportPreview, ImportSourceInfo } from '../../../shared/ipc'
 import { useProject } from '../state/project'
 
 export default function SourceView() {
-  const { sequences, refresh, setNav, setSeq } = useProject()
+  const { root, sequences, refresh, setNav, setSeq } = useProject()
   const [preview, setPreview] = useState<ImportPreview | null>(null)
+  const [sources, setSources] = useState<ImportSourceInfo[]>([])
+  const [madeNow, setMadeNow] = useState<string[]>([])
+  const [opening, setOpening] = useState(false)
+  // 마지막으로 펼친 시나리오는 프로젝트별로 기억해 Sources 로 돌아오면 그대로 연다 (실패해도 무관)
+  const memKey = `nyx_source_${root ?? ''}`
+  const remember = (rel: string | null) => {
+    try {
+      if (rel) sessionStorage.setItem(memKey, rel)
+      else sessionStorage.removeItem(memKey)
+    } catch {
+      /* 저장 안 돼도 그만 */
+    }
+  }
   const [picks, setPicks] = useState<Record<number, SceneRowPick>>({})
   const lastClicked = useRef<number | null>(null)
   const [busy, setBusy] = useState(false)
@@ -20,11 +33,9 @@ export default function SourceView() {
     try {
       const p = await window.conti.api.screenplay.importDialog()
       if (!p) return
-      setPreview(p)
-      const init: typeof picks = {}
-      for (const s of p.scenes) init[s.index] = { on: true, merge: false, seq: s.suggestedSeq, ep: 'EP01' }
-      lastClicked.current = null
-      setPicks(init)
+      show(p)
+      setMadeNow([])
+      void loadSources()
     } catch (e) {
       setErr((e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''))
     } finally {
@@ -32,12 +43,63 @@ export default function SourceView() {
     }
   }
 
+  /** 표를 펼친다. 이미 만든 씬은 고를 수 없다(다시 만들지 않음) */
+  function show(p: ImportPreview, keep?: Record<number, SceneRowPick>) {
+    setPreview(p)
+    const init: Record<number, SceneRowPick> = {}
+    // 처음 가져오면 전부 체크, 이미 만든 씬이 있는 파일을 다시 펼치면 아무것도 체크하지 않는다 (남은 씬을 골라 담기)
+    const fresh = !p.scenes.some((x) => x.madeSeq)
+    for (const s of p.scenes) {
+      const prev = keep?.[s.index]
+      init[s.index] = s.madeSeq ? { on: false, merge: false, seq: s.madeSeq, ep: prev?.ep ?? 'EP01' } : { on: prev ? prev.on : fresh, merge: false, seq: prev?.seq ?? s.suggestedSeq, ep: prev?.ep ?? 'EP01' }
+    }
+    lastClicked.current = null
+    setPicks(init)
+    remember(p.sourceRel)
+  }
+
+  async function loadSources() {
+    try {
+      setSources(await window.conti.api.screenplay.sources())
+    } catch {
+      setSources([])
+    }
+  }
+
+  async function openSource(rel: string) {
+    setErr(null)
+    setOpening(true)
+    try {
+      show(await window.conti.api.screenplay.open(rel))
+      setMadeNow([])
+    } catch (e) {
+      remember(null)
+      setErr((e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''))
+    } finally {
+      setOpening(false)
+    }
+  }
+
+  // 들어올 때: 가져온 시나리오 목록 + 마지막에 펼친 파일 다시 열기
+  useEffect(() => {
+    void loadSources()
+    let rel: string | null = null
+    try {
+      rel = sessionStorage.getItem(memKey)
+    } catch {
+      rel = null
+    }
+    if (rel) void openSource(rel)
+  }, [root]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const made = (i: number) => !!preview?.scenes.find((x) => x.index === i)?.madeSeq
+  const madeTotal = new Set(preview?.scenes.map((x) => x.madeSeq).filter(Boolean)).size
   const order = useMemo(() => preview?.scenes.map((s) => s.index) ?? [], [preview])
   // 체크 = 가져오기, 해제 = 제외. 합치기는 행의 "앞 씬에 합치기" 토글로만.
   const list = useMemo(() => buildImportPicks(order, picks), [order, picks])
   const mergedCount = list.reduce((n, p) => n + p.mergeFollowing.length, 0)
   const dups = duplicateSeqs(list)
-  const checkable = order.filter((i) => !picks[i]?.merge)
+  const checkable = order.filter((i) => !picks[i]?.merge && !made(i))
   const checkedCount = checkable.filter((i) => picks[i]?.on).length
   const allState = checkedCount === 0 ? 'none' : checkedCount === checkable.length ? 'all' : 'some'
 
@@ -52,7 +114,7 @@ export default function SourceView() {
     const next: Record<number, SceneRowPick> = {}
     for (const i of order) {
       const p = picks[i]
-      next[i] = p.merge ? p : { ...p, on: fn(p) }
+      next[i] = p.merge || made(i) ? p : { ...p, on: fn(p) }
     }
     setPicks(normalize(next))
   }
@@ -62,7 +124,7 @@ export default function SourceView() {
     const from = shift && lastClicked.current !== null ? order.indexOf(lastClicked.current) : -1
     const to = order.indexOf(index)
     const range = from >= 0 ? order.slice(Math.min(from, to), Math.max(from, to) + 1) : [index]
-    for (const i of range) if (!next[i].merge) next[i] = { ...next[i], on }
+    for (const i of range) if (!next[i].merge && !made(i)) next[i] = { ...next[i], on }
     lastClicked.current = index
     setPicks(normalize(next))
   }
@@ -84,13 +146,12 @@ export default function SourceView() {
     if (!preview || !list.length) return
     setBusy(true)
     try {
-      const made = await window.conti.api.screenplay.commit(preview.sourceId, list)
+      const created = await window.conti.api.screenplay.commit(preview.sourceId, list)
       await refresh()
-      setPreview(null)
-      if (made[0]) {
-        setSeq(made[0].seq)
-        setNav('Shots')
-      }
+      // 표는 닫지 않는다 — 같은 파일을 다시 읽어 방금 만든 씬을 표시하고 나머지는 그대로 고를 수 있게
+      show(await window.conti.api.screenplay.open(preview.sourceRel), picks)
+      setMadeNow(created.map((q) => q.seq))
+      void loadSources()
     } catch (e) {
       setErr((e as Error).message)
     } finally {
@@ -134,6 +195,7 @@ export default function SourceView() {
             <div className="flex items-center gap-2 text-[12.5px]">
               <FileText size={14} className="text-muted" />
               {preview.fileName} · {preview.lineCount}줄 · 씬 {preview.scenes.length}개
+              {madeTotal > 0 && <span className="text-emerald-400" data-testid="made-total">· 만든 씬 {madeTotal}개</span>}
             </div>
             <div className="flex items-center gap-3">
               {dups.length > 0 && <span className="text-[11.5px] text-warn">SEQ 중복: {dups.join(', ')}</span>}
@@ -145,8 +207,36 @@ export default function SourceView() {
               >
                 선택한 씬 {list.length}개 만들기{mergedCount > 0 ? ` (${mergedCount}개 합침)` : ''}
               </button>
+              <button
+                data-testid="import-close"
+                onClick={() => {
+                  setPreview(null)
+                  setMadeNow([])
+                  remember(null)
+                }}
+                title="표 닫기 (아래 '가져온 시나리오'에서 다시 열 수 있습니다)"
+                className="rounded p-1 text-muted hover:bg-panel-2 hover:text-ink"
+              >
+                <X size={14} />
+              </button>
             </div>
           </div>
+          {madeNow.length > 0 && (
+            <div data-testid="made-banner" className="flex items-center gap-2 border-b border-emerald-900/50 bg-emerald-950/30 px-4 py-1.5 text-[12px] text-emerald-200">
+              <CheckCircle2 size={13} />
+              {madeNow[0]}
+              {madeNow.length > 1 ? ` 외 ${madeNow.length - 1}개` : ''}를 만들었습니다. 남은 씬도 이어서 고를 수 있어요.
+              <button
+                onClick={() => {
+                  setSeq(madeNow[0])
+                  setNav('Shots')
+                }}
+                className="ml-auto rounded border border-emerald-800 px-2 py-0.5 hover:bg-emerald-900/40"
+              >
+                Shots 에서 보기
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-2 border-b border-line px-4 py-1.5 text-[11.5px]">
             <button data-testid="import-all" onClick={() => setAll(() => true)} className="rounded border border-line px-2 py-0.5 hover:bg-panel-2">
               전체 선택
@@ -188,23 +278,38 @@ export default function SourceView() {
               <tbody>
                 {preview.scenes.map((s) => {
                   const p = picks[s.index]
-                  const merged = !!p?.merge
-                  const included = !merged && !!p?.on
-                  const mergeOk = merged || canMerge(order, picks, s.index)
+                  const done = !!s.madeSeq
+                  const merged = !done && !!p?.merge
+                  const included = !merged && !done && !!p?.on
+                  const mergeOk = !done && (merged || canMerge(order, picks, s.index))
                   return (
-                    <tr key={s.index} data-row={s.index} className={`border-t border-line/60 hover:bg-panel-2 ${merged ? 'bg-accent/5' : ''}`}>
+                    <tr key={s.index} data-row={s.index} data-made={done ? s.madeSeq : undefined} className={`border-t border-line/60 hover:bg-panel-2 ${merged ? 'bg-accent/5' : done ? 'bg-emerald-950/20' : ''}`}>
                       <td className="px-3 py-1.5">
-                        <input
-                          type="checkbox"
-                          disabled={merged}
-                          checked={included}
-                          onChange={(e) => toggleRow(s.index, e.target.checked, (e.nativeEvent as MouseEvent).shiftKey === true)}
-                        />
+                        {done ? (
+                          <button
+                            data-testid={`made-${s.index}`}
+                            onClick={() => {
+                              setSeq(s.madeSeq!)
+                              setNav('Shots')
+                            }}
+                            title={`이미 ${s.madeSeq} 로 만들었습니다 — Shots 에서 열기`}
+                            className="text-emerald-400 hover:text-emerald-300"
+                          >
+                            <CheckCircle2 size={14} />
+                          </button>
+                        ) : (
+                          <input
+                            type="checkbox"
+                            disabled={merged}
+                            checked={included}
+                            onChange={(e) => toggleRow(s.index, e.target.checked, (e.nativeEvent as MouseEvent).shiftKey === true)}
+                          />
+                        )}
                       </td>
                       <td className="px-2 py-1.5">
                         <input
                           value={p?.seq ?? ''}
-                          disabled={merged}
+                          disabled={merged || done}
                           onChange={(e) => setPicks({ ...picks, [s.index]: { ...p, seq: e.target.value.toUpperCase() } })}
                           className="w-20 rounded border border-line bg-bg px-1.5 py-0.5 font-mono text-[11.5px] outline-none focus:border-accent disabled:opacity-30"
                         />
@@ -212,12 +317,13 @@ export default function SourceView() {
                       <td className="px-2 py-1.5">
                         <input
                           value={p?.ep ?? ''}
-                          disabled={merged}
+                          disabled={merged || done}
                           onChange={(e) => setPicks({ ...picks, [s.index]: { ...p, ep: e.target.value.toUpperCase() } })}
                           className="w-16 rounded border border-line bg-bg px-1.5 py-0.5 font-mono text-[11.5px] outline-none focus:border-accent disabled:opacity-30"
                         />
                       </td>
-                      <td className={`px-2 py-1.5 ${included || merged ? '' : 'text-muted line-through decoration-muted/60'}`}>
+                      <td className={`px-2 py-1.5 ${included || merged || done ? '' : 'text-muted'}`}>
+                        {done && <span className="mr-1 rounded bg-emerald-900/50 px-1 text-[10.5px] text-emerald-300">{s.madeSeq} 만들어짐</span>}
                         {merged && <span className="mr-1 text-[10.5px] text-accent">↳ {mergeTarget(s.index)}에 합침</span>}
                         <span className="font-medium">{s.headingRaw}</span>
                         {s.timeOfDay && <span className="ml-2 rounded bg-panel-2 px-1 text-[10.5px] text-muted no-underline">{s.timeOfDay === 'D' ? '낮' : '밤'}</span>}
@@ -241,6 +347,32 @@ export default function SourceView() {
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {!preview && opening && (
+        <div className="flex items-center gap-2 px-1 text-[12px] text-muted">
+          <Loader2 size={13} className="animate-spin" /> 시나리오를 다시 펼치는 중…
+        </div>
+      )}
+
+      {!preview && !videoOpen && sources.length > 0 && (
+        <section className="rounded-lg border border-line bg-panel p-4" data-testid="source-list">
+          <div className="mb-2 text-[12.5px] font-medium">가져온 시나리오 {sources.length}개 <span className="ml-1 text-[11.5px] font-normal text-muted">누르면 씬 목록을 다시 펼쳐 남은 씬을 고를 수 있습니다</span></div>
+          <ul className="space-y-0.5 text-[12px]">
+            {sources.map((src) => (
+              <li key={src.rel}>
+                <button disabled={opening} onClick={() => void openSource(src.rel)} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-panel-2 disabled:opacity-50">
+                  <FileText size={13} className="shrink-0 text-muted" />
+                  <span className="truncate">{src.fileName}</span>
+                  <span className="ml-auto shrink-0 text-muted">
+                    만든 씬 {src.madeCount}
+                    {src.sceneCount != null ? ` / ${src.sceneCount}` : ''}개 · {new Date(src.importedAt).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

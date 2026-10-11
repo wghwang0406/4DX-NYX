@@ -60,9 +60,11 @@ export class AuthManager {
   }
 
   private async codexStatus(): Promise<AccountStatus> {
-    const path = await findBin('codex')
+    // 검증: CONTI_CODEX_BIN(가짜 codex) 이 있으면 그것으로 — 이미지 엔진과 같은 바이너리
+    const bin = process.env.CONTI_CODEX_BIN || 'codex'
+    const path = process.env.CONTI_CODEX_BIN || (await findBin('codex'))
     if (!path) return { tool: 'codex', installed: false, loggedIn: false, busy: this.procs.has('codex') }
-    const r = await probe('codex', ['login', 'status'])
+    const r = await probe(bin, ['login', 'status'])
     const loggedIn = r.ok && /logged in/i.test(r.out) && !/not logged/i.test(r.out)
     let account: string | undefined
     let detail = loggedIn ? r.out.trim().split('\n')[0] : undefined

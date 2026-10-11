@@ -19,6 +19,7 @@ const api: Api = {
     close: () => invoke('project:close'),
     busy: () => invoke('project:busy'),
     forgetRecent: (root) => invoke('project:forgetRecent', root),
+    setDefaults: (patch) => invoke('project:setDefaults', patch),
   },
   sequence: {
     list: () => invoke('sequence:list'),
@@ -30,6 +31,8 @@ const api: Api = {
   screenplay: {
     importDialog: () => invoke('screenplay:importDialog'),
     commit: (sourceId, picks) => invoke('screenplay:commit', sourceId, picks),
+    sources: () => invoke('screenplay:sources'),
+    open: (rel) => invoke('screenplay:open', rel),
   },
   assets: {
     list: (ep) => invoke('assets:list', ep),
@@ -53,8 +56,8 @@ const agent: AgentApi = {
   interrupt: (id) => invoke('agent:interrupt', id),
   close: (id) => invoke('agent:close', id),
   spendList: () => invoke('agent:spendList'),
-  spendDecide: (id, d, n) => invoke('agent:spendDecide', id, d, n),
-  spendPreview: (id, n) => invoke('agent:spendPreview', id, n),
+  spendDecide: (id, d, n, engine) => invoke('agent:spendDecide', id, d, n, engine),
+  spendPreview: (id, n, engine) => invoke('agent:spendPreview', id, n, engine),
   requestSpend: (kind, args) => invoke('agent:requestSpend', kind, args),
   jobs: (requestId) => invoke('agent:jobs', requestId),
   jobResubmit: (id) => invoke('agent:jobResubmit', id),

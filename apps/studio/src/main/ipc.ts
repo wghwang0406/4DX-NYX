@@ -1,11 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { join, basename } from 'node:path'
-import { readFile, copyFile, mkdir } from 'node:fs/promises'
+import { readFile, copyFile, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { ProjectStore, MdWatcher, readText, writeAtomic, sha256 } from '@conti/core'
 import { splitScenes, textToLines, seqIdFromSceneNumber, extractPdfLines, type SourceLine } from '@conti/screenplay'
 import { safeName } from '@conti/domain'
-import type { ImportPick, ImportPreview, StoreChange } from '../shared/ipc'
+import type { ImportPick, ImportPreview, ImportSourceInfo, StoreChange } from '../shared/ipc'
 import { toolStatuses } from './diag'
 import { AgentHost } from './agent-host'
 import { AuthManager } from './auth'
@@ -154,6 +154,15 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
 
   ipcMain.handle('project:openPath', async (_e, root: string) => attach(await ProjectStore.open(root), root))
   ipcMain.handle('project:current', async () => (store ? { root: store.root, project: store.getProject() } : null))
+  // 프로젝트 기본값 일부만 (이미지 엔진·콘티 그림체) — 다른 필드는 MCP project_update 로
+  ipcMain.handle('project:setDefaults', async (_e, patch: { imageEngine?: 'higgsfield' | 'codex'; contiStyle?: 'sketch' | 'cinematic' }) => {
+    const s = requireStore()
+    const cur = s.getProject().defaults
+    const next = { ...cur }
+    if (patch.imageEngine === 'higgsfield' || patch.imageEngine === 'codex') next.imageEngine = patch.imageEngine
+    if (patch.contiStyle === 'sketch' || patch.contiStyle === 'cinematic') next.contiStyle = patch.contiStyle
+    return s.updateProject({ defaults: next })
+  })
   ipcMain.handle('project:recent', () => loadRecent())
 
   ipcMain.handle('sequence:list', () => requireStore().listSequences())
@@ -180,37 +189,53 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
     return importFile(s, r.filePaths[0])
   })
 
-  async function importFile(s: ProjectStore, file: string): Promise<ImportPreview> {
-    const fileName = basename(file)
-    let lines: SourceLine[]
-    let hashSource: string | Buffer
+  async function readScreenplayLines(file: string): Promise<{ lines: SourceLine[]; hashSource: string | Buffer }> {
     if (file.toLowerCase().endsWith('.pdf')) {
       const buf = await readFile(file)
-      lines = await extractPdfLines(new Uint8Array(buf))
-      hashSource = buf
+      const lines = await extractPdfLines(new Uint8Array(buf))
       const hangul = lines.reduce((n, l) => n + (l.text.match(/[가-힣]/g)?.length ?? 0), 0)
       if (lines.length > 20 && hangul < lines.length * 2) {
         throw new Error('PDF에서 한글 텍스트를 거의 못 읽었습니다 (스캔본이거나 폰트 매핑이 없음). 텍스트로 저장해 넣어 주세요.')
       }
-    } else {
-      const text = await readText(file)
-      lines = textToLines(text)
-      hashSource = text
+      return { lines, hashSource: buf }
     }
-    const scenes = splitScenes(lines)
-    const sourceId = randomUUID()
+    const text = await readText(file)
+    return { lines: textToLines(text), hashSource: text }
+  }
+
+  /** 새 파일: sources/ 로 복사한 뒤 펼친다 */
+  async function importFile(s: ProjectStore, file: string): Promise<ImportPreview> {
+    const fileName = basename(file)
+    const { lines, hashSource } = await readScreenplayLines(file)
     const rel = `sources/${sha256(hashSource).slice(0, 8)}_${safeName(fileName)}`
     await mkdir(join(s.root, 'sources'), { recursive: true })
     await copyFile(file, join(s.root, rel))
+    return previewOf(s, rel, fileName, lines)
+  }
+
+  /** sources/ 안의 파일 이름 → 보여줄 원래 이름 (앞의 해시 8자리 떼기) */
+  const displayName = (rel: string) => basename(rel).replace(/^[0-9a-f]{8}_/, '')
+  const sceneCounts = new Map<string, number>()
+
+  /** 펼친 표: 이미 만든 씬(그 줄이 어떤 시퀀스 범위 안에 있음)은 madeSeq 로 표시한다 */
+  function previewOf(s: ProjectStore, rel: string, fileName: string, lines: SourceLine[]): ImportPreview {
+    const scenes = splitScenes(lines)
+    sceneCounts.set(rel, scenes.length)
+    const sourceId = randomUUID()
     pendingImports.set(sourceId, { fileName, lines, sourceRel: rel })
-    const existing = new Set(s.listSequences().map((q) => q.seq))
+    const all = s.listSequences()
+    const fromThis = all.filter((q) => q.source?.sourceId === rel && q.source.lineStart != null)
+    const madeFor = (lineStart: number) => fromThis.find((q) => lineStart >= q.source!.lineStart! && lineStart <= (q.source!.lineEnd ?? q.source!.lineStart!))?.seq
+    const existing = new Set(all.map((q) => q.seq))
     return {
       sourceId,
+      sourceRel: rel,
       fileName,
       lineCount: lines.length,
       scenes: scenes.map((sc) => {
-        let seq = seqIdFromSceneNumber(sc.number, sc.index)
-        if (existing.has(seq)) seq = `${seq}_new`
+        const madeSeq = madeFor(sc.lineStart)
+        let seq = madeSeq ?? seqIdFromSceneNumber(sc.number, sc.index)
+        if (!madeSeq && existing.has(seq)) seq = `${seq}_new`
         return {
           index: sc.index,
           number: sc.number,
@@ -222,10 +247,37 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
           lineCount: sc.lines.filter((l) => l.text.trim()).length,
           preview: sc.lines.map((l) => l.text.trim()).filter(Boolean).slice(0, 2).join(' / ').slice(0, 120),
           suggestedSeq: seq,
+          ...(madeSeq ? { madeSeq } : {}),
         }
       }),
     }
   }
+
+  // 가져온 시나리오 목록 — 표를 닫아도 다시 펼칠 수 있게
+  ipcMain.handle('screenplay:sources', async (): Promise<ImportSourceInfo[]> => {
+    const s = requireStore()
+    let names: string[] = []
+    try {
+      names = (await readdir(join(s.root, 'sources'))).filter((n) => /\.(pdf|txt|md|fountain)$/i.test(n))
+    } catch {
+      return []
+    }
+    const seqs = s.listSequences()
+    const out: ImportSourceInfo[] = []
+    for (const n of names) {
+      const rel = `sources/${n}`
+      const st = await stat(join(s.root, rel))
+      out.push({ rel, fileName: displayName(rel), madeCount: seqs.filter((q) => q.source?.sourceId === rel).length, sceneCount: sceneCounts.get(rel), importedAt: st.mtimeMs })
+    }
+    return out.sort((a, b) => b.importedAt - a.importedAt)
+  })
+
+  ipcMain.handle('screenplay:open', async (_e, rel: string): Promise<ImportPreview> => {
+    const s = requireStore()
+    if (!/^sources\/[^/\\]+$/.test(rel) || rel.includes('..')) throw new Error('잘못된 경로')
+    const { lines } = await readScreenplayLines(join(s.root, rel))
+    return previewOf(s, rel, displayName(rel), lines)
+  })
 
   ipcMain.handle('screenplay:commit', async (_e, sourceId: string, picks: ImportPick[]) => {
     const s = requireStore()
@@ -338,8 +390,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
   ipcMain.handle('agent:interrupt', (_e, id: string) => requireHost().interrupt(id))
   ipcMain.handle('agent:close', (_e, id: string) => requireHost().close(id))
   ipcMain.handle('agent:spendList', () => requireHost().spendList())
-  ipcMain.handle('agent:spendDecide', (_e, id: string, d, n) => requireHost().spendDecide(id, d, n))
-  ipcMain.handle('agent:spendPreview', (_e, id: string, n) => requireHost().spendPreview(id, n))
+  ipcMain.handle('agent:spendDecide', (_e, id: string, d, n, engine) => requireHost().spendDecide(id, d, n, engine))
+  ipcMain.handle('agent:spendPreview', (_e, id: string, n, engine) => requireHost().spendPreview(id, n, engine))
   ipcMain.handle('agent:requestSpend', (_e, kind, args) => requireHost().requestSpend(kind, args))
   ipcMain.handle('agent:jobs', (_e, requestId) => requireHost().jobs(requestId))
   ipcMain.handle('agent:jobResubmit', (_e, id: string) => requireHost().jobResubmit(id))
@@ -407,8 +459,22 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
         process.env.CONTI_E2E_KIND === 'assets'
           ? await h.requestSpend('assets_generate', { ep: s.ep, ids: (await requireStore().listAssets(s.ep)).assets.slice(0, n).map((a) => a.id) })
           : await h.requestSpend('conti_generate', { seq, shots, style: 'sketch' })
-      const preview = await h.spendPreview(req.requestId)
-      await h.spendDecide(req.requestId, decision)
+      const engine = (process.env.CONTI_E2E_ENGINE as 'higgsfield' | 'codex' | undefined) || undefined
+      // CONTI_E2E_CARD=1: 승인 카드 UI 에서 엔진 버튼·승인을 실제로 누른다
+      if (process.env.CONTI_E2E_CARD) {
+        const win = getWindow()!
+        const js = (c: string) => win.webContents.executeJavaScript(c)
+        for (let i = 0; i < 40 && !(await js(`!!document.querySelector('[data-testid=engine-switch] [data-engine=codex]:not([disabled])')`)); i++) await new Promise((r) => setTimeout(r, 250))
+        await js(`document.querySelector('[data-testid=engine-switch] [data-engine=${engine ?? 'codex'}]').click()`)
+        await new Promise((r) => setTimeout(r, 700))
+        const card = await js(`(() => { const sw = document.querySelector('[data-testid=engine-switch]'); return { active: sw?.querySelector('.border-accent')?.textContent, text: sw?.closest('.rounded-lg')?.innerText.slice(0, 200) } })()`)
+        if (process.env.CONTI_E2E_SHOTDIR) await writeFile(join(process.env.CONTI_E2E_SHOTDIR, 'card_engine.png'), (await win.webContents.capturePage()).toPNG())
+        await js(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '승인')?.click()`)
+        const jobs = await waitAll(req.requestId)
+        return { card, request: h.spendList().find((r) => r.requestId === req.requestId), jobs, shots: dump() }
+      }
+      const preview = await h.spendPreview(req.requestId, undefined, engine)
+      await h.spendDecide(req.requestId, decision, undefined, engine)
       const jobs = await waitAll(req.requestId)
       // 파일럿이면 후속 카드가 생겼는지 (승인하지 않고 둔다)
       await new Promise((r) => setTimeout(r, 500))

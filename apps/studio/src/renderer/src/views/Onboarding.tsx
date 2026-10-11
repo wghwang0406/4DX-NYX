@@ -74,7 +74,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           {step === 1 && (
             <div>
               <div className="text-[16px] font-semibold">AI 계정</div>
-              <p className="mt-1 text-[12.5px] text-muted">Claude Code 나 Codex 중 하나만 로그인돼 있으면 됩니다. 이미지 생성을 하려면 Higgsfield 도 필요합니다. 앱은 비밀번호·토큰을 저장하지 않고 각 공식 로그인 창을 띄웁니다.</p>
+              <p className="mt-1 text-[12.5px] text-muted">Claude Code 나 Codex 중 하나만 로그인돼 있으면 됩니다. 이미지는 Higgsfield(크레딧) 또는 Codex(ChatGPT 계정의 GPT 이미지)로 만듭니다. 앱은 비밀번호·토큰을 저장하지 않고 각 공식 로그인 창을 띄웁니다.</p>
               <div className="mt-3 space-y-2">
                 {(accounts ?? []).map((a) => (
                   <div key={a.tool} className="flex items-center gap-3 rounded-md border border-line p-3">

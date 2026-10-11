@@ -2,13 +2,14 @@
 // 디스크 기록(queued) → 업로드(캐시) → `generate create --json`(wait 없이) → 원격 id 즉시 기록 → 폴링 → 다운로드 → 버전 기록.
 // 재시작하면 .conti/jobs/*.json 을 읽어 이어 간다 (유료 작업 유실 없음). 유료 작업은 자동 재시도하지 않는다.
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { copyFile, mkdir, readdir, readFile, rename, stat } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { absPath, sha256, writeAtomic, type ProjectStore } from '@conti/core'
 import { PROJECT_DIRS, Version, assetFileName, shotFileName, type Shot, type VersionSource } from '@conti/domain'
 import { CliError, remoteState, type CliParams, type HiggsfieldCli } from './cli'
-import { downloadTo, type FetchLike } from './download'
+import { downloadTo, imageDims, type FetchLike } from './download'
+import type { CodexImageRunner } from './codex-image'
 import { UploadCache } from './uploads'
 import type { JobPlan, JobTarget, SpendKind } from './plan'
 
@@ -30,6 +31,8 @@ export const JobRecord = z.object({
   parentVersionId: z.string().optional(),
   style: z.string().optional(),
   lint: z.array(z.string()).default([]),
+  /** 이미지 엔진 — 없으면 higgsfield (기존 기록 호환). codex = 로그인한 Codex 의 GPT 이미지 */
+  engine: z.enum(['higgsfield', 'codex']).optional(),
   inputHash: z.string().optional(),
   status: JobStatus,
   remote: z.object({ jobId: z.string(), status: z.string().optional(), resultUrl: z.string().optional() }).optional(),
@@ -53,6 +56,10 @@ export interface JobServiceOptions {
   onEvent?: (e: JobEvent) => void
   /** 하루 장수 상한 (기본 project.defaults.dailyCap) */
   dailyCap?: number
+  /** GPT(Codex) 엔진 — 없으면 codex 작업은 실패로 끝난다 */
+  codex?: CodexImageRunner
+  /** codex 엔진 동시 실행 (구독 한도 보호, 기본 2) */
+  codexConcurrency?: number
 }
 
 export class JobCapError extends Error {}
@@ -85,8 +92,9 @@ export class JobService {
   private async set(job: JobRecord, status: JobStatus, patch: Partial<JobRecord> = {}) {
     Object.assign(job, patch, { status })
     await this.save(job)
-    if (job.target.type === 'shot' && (status === 'queued' || status === 'submitted' || status === 'failed')) {
-      await this.setShotStage(job, status === 'submitted' ? 'running' : status === 'failed' ? 'failed' : 'queued')
+    const started = status === 'submitted' || (status === 'running' && job.engine === 'codex' && !patch.remote)
+    if (job.target.type === 'shot' && (status === 'queued' || started || status === 'failed')) {
+      await this.setShotStage(job, started ? 'running' : status === 'failed' ? 'failed' : 'queued')
     }
     if (TERMINAL.has(status)) this.checkRequestDone(job.requestId)
   }
@@ -119,6 +127,10 @@ export class JobService {
   private async recover() {
     for (const j of this.jobs.values()) {
       if (TERMINAL.has(j.status)) continue
+      if (j.engine === 'codex') {
+        await this.recoverCodex(j)
+        continue
+      }
       if (j.status === 'submitting') {
         const found = await this.reconcile(j)
         if (found) await this.set(j, 'submitted', { remote: { jobId: found } })
@@ -132,6 +144,25 @@ export class JobService {
       if (j.status === 'uploading') await this.set(j, 'queued')
       // submitted/running/downloading 은 tick 이 폴링을 이어 간다
     }
+  }
+
+  /** codex: thread 폴더에 결과가 있으면 회수, 실행 전이면 다시 큐, 실행 중 끊겼는데 결과가 없으면 unknown(이중 사용 방지). */
+  private async recoverCodex(j: JobRecord) {
+    const thread = j.remote?.jobId?.startsWith('codex:') ? j.remote.jobId.slice(6) : undefined
+    if (thread && this.o.codex) {
+      const file = await this.o.codex.recover(thread)
+      if (file) {
+        try {
+          await this.finishFromFile(j, file)
+        } catch (e) {
+          await this.set(j, 'failed', { error: (e as Error).message })
+        }
+        return
+      }
+    }
+    if (j.status === 'queued') return
+    if (j.status === 'uploading' && !thread) return void (await this.set(j, 'queued'))
+    await this.set(j, 'unknown', { error: '앱이 꺼진 동안 Codex 작업이 끝나지 않았거나 결과를 찾지 못했습니다. 필요하면 [다시] 를 누르세요.' })
   }
 
   /** 제출 직후 죽었을 때: params.prompt 가 원문 그대로 돌아오므로(REPORT §3) 프롬프트로 찾는다. */
@@ -192,6 +223,7 @@ export class JobService {
         parentVersionId: p.parentVersionId,
         style: p.style,
         lint: p.lint,
+        engine: p.engine === 'codex' ? 'codex' : undefined,
         status: 'queued',
         createdAt: Date.now() + i, // 정렬 안정
         updatedAt: Date.now(),
@@ -209,7 +241,7 @@ export class JobService {
     const j = this.jobs.get(jobId)
     if (!j) throw new Error(`작업 없음: ${jobId}`)
     if (!TERMINAL.has(j.status)) throw new Error('진행 중인 작업은 다시 제출할 수 없습니다')
-    const [n] = await this.submit(j.requestId, [{ kind: j.kind, target: j.target, model: j.model, params: j.params, prompt: j.prompt, refs: j.refs.map((r) => ({ file: r.file, label: r.label })), source: j.source, parentVersionId: j.parentVersionId, lint: j.lint, style: j.style as JobPlan['style'] }])
+    const [n] = await this.submit(j.requestId, [{ kind: j.kind, target: j.target, model: j.model, params: j.params, prompt: j.prompt, refs: j.refs.map((r) => ({ file: r.file, label: r.label })), source: j.source, parentVersionId: j.parentVersionId, lint: j.lint, style: j.style as JobPlan['style'], engine: j.engine }])
     return n
   }
 
@@ -239,9 +271,12 @@ export class JobService {
     this.ticking = true
     try {
       const limit = this.o.concurrency ?? 3
+      const codexLimit = this.o.codexConcurrency ?? 2
+      const codexRunning = () => [...this.running].filter((id) => this.jobs.get(id)?.engine === 'codex').length
       for (const j of this.list()) {
         if (this.running.size >= limit) break
         if (this.running.has(j.id)) continue
+        if (j.engine === 'codex' && (j.status !== 'queued' || codexRunning() >= codexLimit)) continue
         if (j.status === 'queued') {
           const dep = j.dependsOn ? this.jobs.get(j.dependsOn) : undefined
           if (dep && !TERMINAL.has(dep.status)) continue
@@ -273,6 +308,7 @@ export class JobService {
   }
 
   private async run(j: JobRecord) {
+    if (j.engine === 'codex') return this.runCodex(j)
     if (j.status === 'queued') {
       await this.set(j, 'uploading')
       const media: string[] = []
@@ -327,14 +363,18 @@ export class JobService {
     // 다운로드 → 버전
     const { rel, n } = await this.targetFile(j, resultUrl)
     const dl = await downloadTo(resultUrl, absPath(this.root, rel), this.o.fetchImpl)
+    await this.finalize(j, rel, n, dl)
+  }
+
+  private async finalize(j: JobRecord, rel: string, n: number, img: { sha256: string; w?: number; h?: number }) {
     const version = Version.parse({
       id: randomUUID(),
       n,
       stage: j.target.type === 'shot' ? 'conti' : 'image',
       file: rel,
-      sha256: dl.sha256,
-      w: dl.w,
-      h: dl.h,
+      sha256: img.sha256,
+      w: img.w,
+      h: img.h,
       source: j.source,
       parentId: j.parentVersionId,
       jobId: j.id,
@@ -342,6 +382,42 @@ export class JobService {
     })
     await this.applyVersion(j, version)
     await this.set(j, 'done', { outFile: rel, versionId: version.id })
+  }
+
+  // ── GPT(Codex) 엔진 ─────────────────────────────────────────────────────
+  private async runCodex(j: JobRecord) {
+    if (!this.o.codex) throw new Error('GPT(Codex) 엔진이 준비되지 않았습니다')
+    const dep = j.dependsOn ? this.jobs.get(j.dependsOn) : undefined
+    if (dep?.outFile) j.refs = [{ file: dep.outFile, label: '정본' }, ...j.refs.filter((r) => r.file !== dep.outFile)]
+    const refs = j.refs.map((r) => absPath(this.root, r.file))
+    const hashes = await Promise.all(refs.map(async (f) => sha256(await readFile(f))))
+    j.refs = j.refs.map((r, i) => ({ ...r, sha256: hashes[i] }))
+    j.inputHash = sha256(JSON.stringify({ model: j.model, params: j.params, prompt: j.prompt, refs: hashes }))
+    await this.set(j, 'running')
+    const r = await this.o.codex.generate({
+      prompt: j.prompt,
+      refs,
+      aspect: j.params.aspect_ratio ?? '16:9',
+      cwd: this.root,
+      onThread: (t) => void this.set(j, 'running', { remote: { jobId: `codex:${t}`, status: 'running' } }),
+    })
+    if (!j.remote?.jobId) j.remote = { jobId: `codex:${r.threadId}`, status: 'running' }
+    await this.finishFromFile(j, r.file)
+  }
+
+  /** Codex 가 저장한 파일 → 검증 → 프로젝트 규칙 이름으로 원자적 복사 → 버전 */
+  private async finishFromFile(j: JobRecord, absFile: string) {
+    await this.set(j, 'downloading')
+    const buf = await readFile(absFile)
+    const dims = imageDims(buf)
+    if (!dims) throw new Error(`이미지가 아닙니다: ${absFile}`)
+    const { rel, n } = await this.targetFile(j, absFile)
+    const target = absPath(this.root, rel)
+    await mkdir(dirname(target), { recursive: true })
+    const tmp = `${target}.part`
+    await copyFile(absFile, tmp)
+    await rename(tmp, target)
+    await this.finalize(j, rel, n, { sha256: sha256(buf), w: dims.w, h: dims.h })
   }
 
   // ── 파일명·버전 ─────────────────────────────────────────────────────────

@@ -15,16 +15,30 @@ export interface ImportScene extends Pick<SceneChunk, 'index' | 'number' | 'head
   preview: string
   suggestedSeq: string
   lineCount: number
+  /** 이 씬(줄)이 이미 들어간 시퀀스 — 다시 만들지 않는다 */
+  madeSeq?: string
 }
 
 export interface ImportPreview {
   sourceId: string
+  /** 프로젝트 sources/ 안의 사본 — 다시 펼칠 때 쓴다 */
+  sourceRel: string
   fileName: string
   lineCount: number
   scenes: ImportScene[]
 }
 
-/** 가져오기 확정: 체크 해제된 씬은 바로 앞의 체크된 씬에 합쳐진다 (씬 경계 수동 조정) */
+/** 가져온 시나리오 파일 (sources/) */
+export interface ImportSourceInfo {
+  rel: string
+  fileName: string
+  madeCount: number
+  /** 이번 실행에서 펼친 적이 있으면 씬 수 */
+  sceneCount?: number
+  importedAt: number
+}
+
+/** 가져오기 확정: 체크한 씬만 만든다. mergeFollowing 은 사용자가 "앞 씬에 합치기"를 켠 뒤따르는 씬 */
 export interface ImportPick {
   index: number
   seq: string
@@ -49,6 +63,7 @@ export interface Api {
     close(): Promise<void>
     busy(): Promise<{ jobs: number }>
     forgetRecent(root: string): Promise<Array<{ root: string; title: string; code: string; openedAt: number }>>
+    setDefaults(patch: { imageEngine?: 'higgsfield' | 'codex'; contiStyle?: 'sketch' | 'cinematic' }): Promise<Project>
   }
   sequence: {
     list(): Promise<Sequence[]>
@@ -62,6 +77,8 @@ export interface Api {
   screenplay: {
     importDialog(): Promise<ImportPreview | null>
     commit(sourceId: string, picks: ImportPick[]): Promise<Sequence[]>
+    sources(): Promise<ImportSourceInfo[]>
+    open(rel: string): Promise<ImportPreview>
   }
   assets: {
     list(ep: string): Promise<Asset[]>

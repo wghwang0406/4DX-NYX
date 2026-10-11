@@ -126,3 +126,23 @@ CONTI_MCP_TOKEN=<랜덤토큰> codex exec \
 - `t1-mcp.mjs [bearer|headers] [approve|auto|…] [ignore]`, `t2-agents.mjs`, `t3-sandbox.mjs <mode>`, `t3c-codemode.mjs`, `t4-resume.mjs`, `t5-schema.mjs`, `t6-interrupt.mjs`(그룹 SIGTERM, 실패 사례), `t6b-interrupt.mjs`(SIGINT, 성공 사례)
 - `fixtures/projA/AGENTS.md`, `fixtures/skills/greet/SKILL.md`, `fixtures/schema.json`
 - `samples/` — 원본 JSONL · stderr · MCP 서버 로그 · doctor/sandbox 출력
+
+---
+
+## 이미지 생성 (2026-10-11, Codex 로그인으로 GPT 이미지 — 앱 이미지 엔진 후보)
+
+**실행:** `codex exec --json --skip-git-repo-check -s read-only -c features.image_generation=true -` (프롬프트 stdin).
+`codex features list` → `image_generation  stable  true` (0.162.0).
+
+**결과: 이 맥은 지금 Codex 로그아웃 상태** (`codex login status` → `Not logged in`, `~/.codex/auth.json` 없음).
+실행하면 `thread.started` 뒤 401 재연결 10회 → `turn.failed {error.message: "unexpected status 401 Unauthorized: Missing bearer…"}`, 종료코드 1, 약 17초.
+샘플 `samples/imagegen_401_not_logged_in.jsonl`. → 앱은 401/Unauthorized 를 "Codex 로그인 필요"로 분류한다.
+
+**과거 세션 기록에서 확인한 형태** (`~/.codex/sessions/2026/10/09/rollout-…-01a120f7….jsonl`, 사용자가 9일에 만든 이미지):
+- 도구: `image_gen__imagegen({ prompt, referenced_image_paths?: [절대경로…] })` — 레퍼런스 이미지를 경로로 넘긴다(편집·일관성).
+- 완료 항목: `item_completed.item = { type: "Extension", kind: "image_gen.generation", id: "exec-<uuid>", status: "completed", revisedPrompt }`.
+- 파일: `~/.codex/generated_images/<thread_id>/<item id>.png` (`thread_id` 는 `thread.started` 의 값과 같은 UUIDv7).
+- 크기: 프롬프트로 정한다 — "1536x1024" 요청 → 1536×1024, 16:9 요청 → 1672×941. 한 장 42–106초.
+
+**앱 설계 반영:** thread id 를 받자마자 작업 기록에 남기고(`codex:<thread>`), 끝나면 그 폴더의 png 를 회수한다.
+앱이 꺼져도 폴더에 결과가 남으므로 재시작 때 회수 가능. 로그인 후 실제 1장으로 `exec --json` 의 이미지 항목 형태를 다시 확인할 것.

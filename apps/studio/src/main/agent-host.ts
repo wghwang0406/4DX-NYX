@@ -8,7 +8,7 @@ import { createContiMcp, type JobView as McpJobView, type SpendKind, type SpendR
 import { adapters, pickAvailable, type AgentEvent, type AgentKind, type AgentSession } from '@conti/agents'
 import { ProjectStore, writeAtomic, exists, readText } from '@conti/core'
 import { assetJobCount } from '@conti/domain'
-import { JobService, ModelTable, RealHiggsfieldCli, planRequest, type JobEvent, type JobRecord } from '@conti/genengine'
+import { JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, engineFor, planRequest, type JobEvent, type JobRecord } from '@conti/genengine'
 import type { AgentAvailability, AgentUiEvent, ChatMessage, JobView, SpendPreview, SpendRequestView, ThreadInfo } from '../shared/agent-ipc'
 import type { FeedbackItem } from '../shared/publish-ipc'
 
@@ -111,7 +111,9 @@ export class AgentHost {
     } catch (e) {
       console.error('models.json 로드 실패', e)
     }
-    this.jobsvc = new JobService({ store: this.store, cli: this.makeCli(), onEvent: (e) => this.onJobEvent(e) })
+    // GPT 엔진: 로그인한 Codex 의 image_gen (검증은 CONTI_CODEX_BIN 가짜 바이너리 + CONTI_CODEX_HOME)
+    const codex = new RealCodexImage({ bin: process.env.CONTI_CODEX_BIN || undefined, codexHome: process.env.CONTI_CODEX_HOME || undefined })
+    this.jobsvc = new JobService({ store: this.store, cli: this.makeCli(), codex, onEvent: (e) => this.onJobEvent(e) })
     await this.jobsvc.init().catch((e) => console.error('JobService init 실패', e))
   }
 
@@ -367,19 +369,28 @@ export class AgentHost {
     }, 0)
   }
 
-  async spendPreview(requestId: string, includeNeighbors?: boolean): Promise<SpendPreview> {
+  /** 카드에서 엔진을 바꾸면 요청 인자에 남긴다 (미리보기·승인·파일럿 후속이 같은 엔진) */
+  private argsWithEngine(req: { args: unknown }, engine?: 'higgsfield' | 'codex'): Record<string, unknown> {
+    const args = req.args as Record<string, unknown>
+    if (engine) args.engine = engine
+    return args
+  }
+
+  async spendPreview(requestId: string, includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex'): Promise<SpendPreview> {
     const { mcp, models } = this.requireEngine()
     const req = mcp.getSpendRequest(requestId)
     if (!req) throw new Error('요청이 없습니다')
-    const r = await planRequest({ store: this.store, models }, req.kind, req.args as Record<string, unknown>, 'approved', { includeNeighbors })
+    const args = this.argsWithEngine(req, engine)
+    const r = await planRequest({ store: this.store, models }, req.kind, args, 'approved', { includeNeighbors })
     return {
+      engine: engineFor({ store: this.store, models }, args),
       count: r.plans.length,
       notes: r.notes,
       items: r.plans.map((p) => ({ target: p.target.type === 'shot' ? `${p.target.seq} ${p.target.shotNo}` : `${p.target.tag} ${p.target.view}`, model: p.model, prompt: p.prompt, refs: p.refs.map((x) => x.label), lint: p.lint })),
     }
   }
 
-  async spendDecide(requestId: string, decision: 'approved' | 'rejected' | 'pilot', includeNeighbors?: boolean) {
+  async spendDecide(requestId: string, decision: 'approved' | 'rejected' | 'pilot', includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex') {
     const view = this.spends.get(requestId)
     if (!view) throw new Error('요청이 없습니다')
     if (view.status !== 'awaiting_approval') return
@@ -393,7 +404,7 @@ export class AgentHost {
       return
     }
     try {
-      const plan = await planRequest({ store: this.store, models }, req.kind, req.args as Record<string, unknown>, decision, { includeNeighbors })
+      const plan = await planRequest({ store: this.store, models }, req.kind, this.argsWithEngine(req, engine), decision, { includeNeighbors })
       if (!plan.plans.length) throw new Error('생성할 것이 없습니다')
       await jobs.submit(requestId, plan.plans)
       mcp.resolveSpendRequest(requestId, decision, { includeNeighbors })

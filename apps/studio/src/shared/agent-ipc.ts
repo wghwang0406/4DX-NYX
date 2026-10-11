@@ -61,6 +61,8 @@ export interface SpendRequestView {
 
 /** 승인 카드를 펼쳤을 때 보여줄 계획 (무료 — 크레딧은 표시하지 않는다) */
 export interface SpendPreview {
+  /** 이 요청이 쓸 이미지 엔진 (요청 인자 > 프로젝트 기본값) */
+  engine: 'higgsfield' | 'codex'
   count: number
   notes: string[]
   items: Array<{ target: string; model: string; prompt: string; refs: string[]; lint: string[] }>
@@ -94,8 +96,8 @@ export interface AgentApi {
   interrupt(threadId: string): Promise<void>
   close(threadId: string): Promise<void>
   spendList(): Promise<SpendRequestView[]>
-  spendDecide(requestId: string, decision: 'approved' | 'rejected' | 'pilot', includeNeighbors?: boolean): Promise<void>
-  spendPreview(requestId: string, includeNeighbors?: boolean): Promise<SpendPreview>
+  spendDecide(requestId: string, decision: 'approved' | 'rejected' | 'pilot', includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex'): Promise<void>
+  spendPreview(requestId: string, includeNeighbors?: boolean, engine?: 'higgsfield' | 'codex'): Promise<SpendPreview>
   /** UI 버튼에서 유료 요청을 만든다 — 승인 카드가 뜬다 (바로 생성하지 않는다) */
   requestSpend(kind: SpendKindView, args: Record<string, unknown>): Promise<SpendRequestView>
   jobs(requestId?: string): Promise<JobView[]>

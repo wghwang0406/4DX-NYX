@@ -167,7 +167,7 @@ export default function ChatPanel({ scene, selectedShot, demo }: Props) {
           <Bubble key={m.id} m={m} />
         ))}
         {pending.map((r) => (
-          <SpendCard key={r.requestId} req={r} includeNeighbors={includeNeighbors} setIncludeNeighbors={setIncludeNeighbors} onDecide={(d) => void api.spendDecide(r.requestId, d, includeNeighbors).then(() => api.spendList().then(setSpends))} />
+          <SpendCard key={r.requestId} req={r} includeNeighbors={includeNeighbors} setIncludeNeighbors={setIncludeNeighbors} onDecide={(d, engine) => void api.spendDecide(r.requestId, d, includeNeighbors, engine).then(() => api.spendList().then(setSpends))} />
         ))}
         {error && <div className="rounded-md border border-red-900/60 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">{error}</div>}
       </div>
@@ -247,7 +247,7 @@ function SpendCard({
   req: SpendRequestView
   includeNeighbors: boolean
   setIncludeNeighbors: (v: boolean) => void
-  onDecide: (d: 'approved' | 'rejected' | 'pilot') => void
+  onDecide: (d: 'approved' | 'rejected' | 'pilot', engine?: 'higgsfield' | 'codex') => void
 }) {
   const label: Record<string, string> = {
     conti_generate: '콘티',
@@ -262,16 +262,27 @@ function SpendCard({
   const waiting = req.status === 'awaiting_approval'
   const active = req.status === 'approved' || req.status === 'pilot'
   const regen = req.kind === 'conti_generate' && req.shots && req.shots.length > 0
-
-  // 펼치면 계획 미리보기(무료) — 체크박스가 바뀌면 다시
+  // 이미지 엔진: 고르기 전엔 요청/프로젝트 기본값(미리보기가 알려준다)
+  const [engine, setEngine] = useState<'higgsfield' | 'codex' | undefined>()
+  const [codexReady, setCodexReady] = useState<boolean | null>(null)
   useEffect(() => {
-    if (!open || !api || !waiting) return
+    if (!waiting || !window.conti?.auth) return
+    void window.conti.auth
+      .status()
+      .then((list) => setCodexReady(!!list.find((a) => a.tool === 'codex')?.loggedIn))
+      .catch(() => setCodexReady(null))
+  }, [waiting])
+
+  // 계획 미리보기(무료) — 엔진 기본값을 알기 위해 항상, 체크박스·엔진이 바뀌면 다시
+  useEffect(() => {
+    if (!api || !waiting) return
     let live = true
-    api.spendPreview(req.requestId, includeNeighbors).then((p) => live && setPreview(p)).catch(() => live && setPreview(null))
+    api.spendPreview(req.requestId, includeNeighbors, engine).then((p) => live && setPreview(p)).catch(() => live && setPreview(null))
     return () => {
       live = false
     }
-  }, [open, includeNeighbors, req.requestId, api, waiting])
+  }, [includeNeighbors, req.requestId, api, waiting, engine])
+  const curEngine = engine ?? preview?.engine ?? 'higgsfield'
   // 진행 중·끝난 요청은 작업 목록을 보여준다
   useEffect(() => {
     if (!api || waiting) return
@@ -305,6 +316,29 @@ function SpendCard({
         {req.shots?.length ? `대상: ${req.shots.slice(0, 6).join(', ')}${req.shots.length > 6 ? ` 외 ${req.shots.length - 6}` : ''}` : req.seq ? `${req.seq} 전체` : '에셋 시트·뷰'}
       </p>
       {req.error && <p className="mt-1 text-[11.5px] text-red-300">{req.error}</p>}
+      {waiting && (
+        <div className="mt-2 flex items-center gap-1 text-[11.5px]" data-testid="engine-switch">
+          <span className="mr-1 text-muted">엔진</span>
+          {(
+            [
+              ['higgsfield', 'Higgsfield'],
+              ['codex', 'GPT · Codex'],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              data-engine={k}
+              disabled={k === 'codex' && codexReady === false && curEngine !== 'codex'}
+              onClick={() => setEngine(k)}
+              title={k === 'codex' ? (codexReady === false ? '설정 › 계정에서 Codex 에 로그인하면 쓸 수 있습니다' : '로그인한 Codex(ChatGPT)의 GPT 이미지 — Higgsfield 크레딧을 쓰지 않습니다') : 'Higgsfield 모델 (크레딧)'}
+              className={`rounded-md border px-2 py-0.5 disabled:opacity-40 ${curEngine === k ? 'border-accent bg-accent-soft text-ink' : 'border-line text-muted hover:text-ink'}`}
+            >
+              {label}
+            </button>
+          ))}
+          {curEngine === 'codex' && codexReady === false && <span className="ml-1 text-warn">Codex 로그인 필요</span>}
+        </div>
+      )}
       {waiting && regen && (
         <label className="mt-2 flex items-center gap-1.5 text-[11.5px] text-muted">
           <input type="checkbox" checked={includeNeighbors} onChange={(e) => setIncludeNeighbors(e.target.checked)} /> 앞뒤 컷 포함
@@ -346,6 +380,7 @@ function SpendCard({
             <div key={j.id} className="flex items-center gap-2">
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${j.status === 'done' ? 'bg-emerald-400' : j.status === 'failed' || j.status === 'unknown' ? 'bg-red-400' : 'animate-pulse bg-accent'}`} />
               <span className="font-mono">{j.target}</span>
+              {j.model === 'codex_image' && <span className="shrink-0 rounded bg-accent-soft px-1 text-[9.5px] text-accent">GPT</span>}
               <span className="truncate text-muted">{j.status === 'done' ? j.outFile?.split('/').pop() : j.error ?? j.status}</span>
               {(j.status === 'failed' || j.status === 'unknown') && api && (
                 <button onClick={() => void api.jobResubmit(j.id).then(() => api.jobs(req.requestId).then(setJobs))} className="ml-auto shrink-0 rounded border border-line px-1 text-[10px] text-muted hover:text-ink">
@@ -358,11 +393,11 @@ function SpendCard({
       )}
       {waiting && (
         <div className="mt-3 flex gap-2">
-          <button onClick={() => onDecide('approved')} className="flex items-center gap-1 rounded-md bg-accent px-4 py-1.5 text-[12.5px] font-medium text-white hover:brightness-110">
+          <button disabled={curEngine === 'codex' && codexReady === false} onClick={() => onDecide('approved', curEngine)} className="flex items-center gap-1 rounded-md bg-accent px-4 py-1.5 text-[12.5px] font-medium text-white hover:brightness-110 disabled:opacity-40">
             <Check size={13} /> 승인
           </button>
           {req.count > 1 && (
-            <button onClick={() => onDecide('pilot')} className="rounded-md border border-line px-3 py-1.5 text-[12.5px] hover:bg-panel">
+            <button disabled={curEngine === 'codex' && codexReady === false} onClick={() => onDecide('pilot', curEngine)} className="rounded-md border border-line px-3 py-1.5 text-[12.5px] hover:bg-panel">
               1장만 먼저
             </button>
           )}

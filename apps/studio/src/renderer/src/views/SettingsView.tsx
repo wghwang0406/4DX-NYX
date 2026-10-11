@@ -1,3 +1,4 @@
+import { useProject } from '../state/project'
 import { useEffect, useState } from 'react'
 import { CheckCircle2, XCircle, LogIn, LogOut, RefreshCw, ExternalLink, Loader2, AlertTriangle, Stethoscope, Server } from 'lucide-react'
 import type { AccountStatus, AuthEvent, AuthTool, LoginOptions } from '../../../shared/auth-ipc'
@@ -5,7 +6,7 @@ import DiagnosticsView from './DiagnosticsView'
 
 const LABEL: Record<AuthTool, { name: string; desc: string }> = {
   claude: { name: 'Claude Code', desc: 'AI 어시스턴트 — Claude 구독(claude.ai) 또는 Anthropic Console API 계정' },
-  codex: { name: 'Codex', desc: 'AI 어시스턴트 — ChatGPT 계정' },
+  codex: { name: 'Codex', desc: 'AI 어시스턴트 · GPT 이미지 생성 — ChatGPT 계정' },
   higgsfield: { name: 'Higgsfield', desc: '이미지 생성 — 크레딧이 있는 Higgsfield 계정' },
 }
 
@@ -114,6 +115,8 @@ export default function SettingsView() {
               </button>
             </div>
           </section>
+
+          <EngineSettings codexReady={!!accounts?.find((x) => x.tool === 'codex')?.loggedIn} />
 
           {(accounts ?? (['claude', 'codex', 'higgsfield'] as AuthTool[]).map((tool): AccountStatus => ({ tool, installed: true, loggedIn: false, busy: false }))).map((a) => {
             const flow = flows[a.tool]
@@ -279,6 +282,37 @@ export function ServerSettings() {
           {result.ok ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />} {result.message}
         </div>
       )}
+    </section>
+  )
+}
+
+/** 이 프로젝트의 이미지 생성 엔진 기본값 — 승인 카드에서 요청마다 바꿀 수 있다 */
+function EngineSettings({ codexReady }: { codexReady: boolean }) {
+  const { project, refresh } = useProject()
+  if (!project) return null
+  const cur = project.defaults.imageEngine ?? 'higgsfield'
+  const set = (imageEngine: 'higgsfield' | 'codex') => void window.conti.api.project.setDefaults({ imageEngine }).then(() => refresh())
+  return (
+    <section className="rounded-lg border border-line bg-panel p-4" data-testid="engine-settings">
+      <div className="text-[13.5px] font-semibold">이미지 생성 엔진 <span className="ml-1 text-[11.5px] font-normal text-muted">{project.title} 기본값</span></div>
+      <div className="mt-1 text-[12px] text-muted">에셋 시트·콘티·다시 그리기·수정에 쓸 엔진. 생성할 때 승인 카드에서 요청마다 바꿀 수 있습니다.</div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
+        <button onClick={() => set('higgsfield')} className={`rounded-md border p-3 text-left ${cur === 'higgsfield' ? 'border-accent bg-accent-soft' : 'border-line hover:bg-panel-2'}`}>
+          <div className="font-medium">Higgsfield</div>
+          <div className="mt-0.5 text-[11.5px] text-muted">인물 Soul · 장소 Soul Cinema · 소품 Nano · 콘티 GPT Image 2.5. Soul ID 로 얼굴 고정. 크레딧 사용</div>
+        </button>
+        <button
+          onClick={() => set('codex')}
+          disabled={!codexReady && cur !== 'codex'}
+          className={`rounded-md border p-3 text-left disabled:opacity-50 ${cur === 'codex' ? 'border-accent bg-accent-soft' : 'border-line hover:bg-panel-2'}`}
+        >
+          <div className="font-medium">GPT · Codex</div>
+          <div className="mt-0.5 text-[11.5px] text-muted">
+            로그인한 Codex(ChatGPT)의 이미지 생성. Higgsfield 크레딧을 쓰지 않고 시트를 레퍼런스로 붙입니다. 한 장 1–2분, Soul ID 없음
+            {!codexReady && <span className="mt-1 block text-warn">아래 Codex 에 먼저 로그인하세요</span>}
+          </div>
+        </button>
+      </div>
     </section>
   )
 }

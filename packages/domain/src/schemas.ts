@@ -210,8 +210,10 @@ export const Project = z.object({
       quality: z.string().default('high'),
       autoApproveCount: z.number().int().default(0),
       dailyCap: z.number().int().default(200),
+      /** 이미지 생성 엔진 기본값: higgsfield(크레딧) / codex(로그인한 Codex 의 GPT 이미지) — 승인 카드에서 요청마다 바꿀 수 있다 */
+      imageEngine: z.enum(['higgsfield', 'codex']).default('higgsfield'),
     })
-    .default({ aspect: '16:9', contiStyle: 'sketch', quality: 'high', autoApproveCount: 0, dailyCap: 200 }),
+    .default({ aspect: '16:9', contiStyle: 'sketch', quality: 'high', autoApproveCount: 0, dailyCap: 200, imageEngine: 'higgsfield' }),
   layoutTemplateId: z.string().default('placeholder-a4-6up'),
   // 시퀀스 → 에피소드 매핑 (config.md Episode Mapping 과 동일)
   episodeMap: z.record(SeqId, EpId).default({}),
