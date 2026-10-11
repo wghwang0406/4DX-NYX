@@ -81,7 +81,6 @@ function createWindow(): BrowserWindow {
     if (process.env.CONTI_SEQ) query.seq = process.env.CONTI_SEQ
     if (process.env.CONTI_LAB) query.lab = '1'
     if (process.env.CONTI_EXPAND) query.expand = '1' // 캡처용: 에셋 카드 모두 펼침
-    if (process.env.CONTI_STAGE) query.stage = process.env.CONTI_STAGE // Shots 단계 탭 (image)
     if (process.env.CONTI_VIEW) query.view = process.env.CONTI_VIEW // 캡처용: 에셋 이미지 크게 보기 (@태그:뷰)
     if (process.env.CONTI_VIDEO_UI) query.video = '1'
     if (process.env.CONTI_SETTINGS) query.settings = process.env.CONTI_SETTINGS
@@ -502,19 +501,15 @@ function createWindow(): BrowserWindow {
           r.detailEdit = { size: shotOf('0020')?.sizeCode, action: shotOf('0020')?.actionKo }
           // 4) 미리보기 iframe 안 패널 수
           r.previewCells = await js(`(() => { const f = document.querySelector('iframe[title=layout]'); return f?.contentDocument?.querySelectorAll('.cell[data-shot]').length ?? -1 })()`)
-          // 5) 재생: Conti 에는 플레이어가 없다 → Conti Export › 애니매틱 미리보기에서 Space → 1.2초 → 시간 표시가 바뀌었는가
+          // 5) 시트 크게 보기·저장: Conti 의 시트 미리보기 [크게 보기·저장] → 전체 페이지 + PDF/PNG/애니매틱 버튼 → Esc 로 닫힘
           r.contiHasPlayer = await js(`!!document.querySelector('[data-testid=player-time]')`)
-          await js(`(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'Conti Export'); b?.click(); return !!b })()`)
-          await wait(500)
-          await js(`(() => { const b = [...document.querySelectorAll('[data-testid=export-tabs] button')].find(x => x.textContent.trim() === '애니매틱 미리보기'); b?.click(); return !!b })()`)
-          await wait(400)
-          const t0 = await js(`document.querySelector('[data-testid=player-time]')?.textContent ?? ''`)
-          await js(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }))`)
+          await js(`document.querySelector('[data-testid=sheet-open]')?.click()`)
           await wait(1200)
-          const t1 = await js(`document.querySelector('[data-testid=player-time]')?.textContent ?? ''`)
-          await js(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }))`)
-          r.play = { t0, t1 }
-          if (screenshotPath) await writeFile(screenshotPath.replace(/\.png$/, '_animatic.png'), (await win.webContents.capturePage()).toPNG())
+          r.sheetViewer = await js(`(() => { const v = document.querySelector('[data-testid=sheet-viewer]'); if (!v) return null; return { buttons: [...v.querySelectorAll('button')].map(b => b.textContent.trim()).filter(t => /PDF|PNG|애니매틱/.test(t)), pages: v.querySelector('iframe[title=layout]')?.contentDocument?.querySelectorAll('.page').length ?? -1 } })()`)
+          if (screenshotPath) await writeFile(screenshotPath.replace(/\.png$/, '_sheet.png'), (await win.webContents.capturePage()).toPNG())
+          await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`)
+          await wait(300)
+          r.sheetClosed = await js(`!document.querySelector('[data-testid=sheet-viewer]')`)
           // 6) Template Lab: 복제 → style.css 수정 → 변경 이벤트·렌더 반영
           const changes: string[] = []
           const orig = win.webContents.send.bind(win.webContents)

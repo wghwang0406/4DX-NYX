@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Maximize2 } from 'lucide-react'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import Player from './components/Player'
@@ -15,7 +16,7 @@ import StartScreen from './views/StartScreen'
 import SourceView from './views/SourceView'
 import SettingsView from './views/SettingsView'
 import AssetsView from './views/AssetsView'
-import LayoutView from './views/LayoutView'
+import SheetViewer from './components/SheetViewer'
 import PublishView from './views/PublishView'
 import Onboarding from './views/Onboarding'
 import type { UpdateInfo } from '../../shared/app-ipc'
@@ -73,9 +74,10 @@ function Shell() {
   const [playing, setPlaying] = useState(false)
   // Conti 왼쪽 위: 컷 상세(기본) / 원본 영상(영상 입력 시퀀스만). 애니매틱 재생은 Conti Export 로 옮겼다.
   const [contiTab, setContiTab] = useState<'detail' | 'video'>('detail')
-  // Shots 단계 탭: 콘티 / 콘티 기반 이미지 (이미지 탭에서만 아래 타임라인)
-  const [shotsTab, setShotsTab] = useState<'conti' | 'image'>(() => (new URLSearchParams(window.location.search).get('stage') === 'image' ? 'image' : 'conti'))
-  const imageScene = useMemo(() => (sequence && shotsTab === 'image' ? sequenceToScene(sequence, project?.title ?? '', 'image') : null), [sequence, shotsTab, project])
+  // Images 화면의 타임라인은 최종 이미지 단계 그림으로
+  const imageScene = useMemo(() => (sequence && nav === 'Images' ? sequenceToScene(sequence, project?.title ?? '', 'image') : null), [sequence, nav, project])
+  // Conti 시트 크게 보기·저장 (예전 Conti Export). ?lab=1 이면 Template Lab 으로 연다 (캡처용)
+  const [sheetOpen, setSheetOpen] = useState(() => new URLSearchParams(window.location.search).get('lab') === '1')
   const videoTab = !!scene?.video && contiTab === 'video' && nav === 'Conti'
 
   useEffect(() => {
@@ -156,7 +158,7 @@ function Shell() {
   // Conti 에서 아무 컷도 안 골랐으면 첫 컷을 고른다 (컷 상세가 비지 않게). 위의 씬 전환 초기화보다 뒤에 둔다.
   const firstShot = scene?.shots[0]?.no
   useEffect(() => {
-    if ((nav === 'Conti' || nav === 'Shots') && !selectedShot && firstShot) selectShot(firstShot)
+    if ((nav === 'Conti' || nav === 'Shots' || nav === 'Images') && !selectedShot && firstShot) selectShot(firstShot)
   }, [nav, selectedShot, firstShot, selectShot])
 
   const changeDuration = useCallback(
@@ -170,15 +172,19 @@ function Shell() {
 
   const workArea =
     nav === 'Shots' && sequence ? (
-      <div className={`grid min-h-0 flex-1 gap-3 p-3 pt-0 ${shotsTab === 'image' ? 'grid-rows-[minmax(0,2fr)_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)]'}`}>
+      // Shots = 콘티 확인: 목록(고른 행 아래 묘사 전체) + 고른 샷의 콘티 크게
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3 p-3 pt-0">
+        <ShotTable sequence={sequence} selectedShot={selectedShot} onSelect={selectShot} />
+        <ShotPreview sequence={sequence} selectedShot={selectedShot} stage="conti" />
+      </div>
+    ) : nav === 'Images' && sequence ? (
+      // Images = 영상으로 넘어갈 최종 이미지: 목록 + 고른 샷의 이미지 크게 + 타임라인
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,2fr)_minmax(0,1fr)] gap-3 p-3 pt-0">
         <div className="grid min-h-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
-          <ShotTable sequence={sequence} selectedShot={selectedShot} onSelect={selectShot} stage={shotsTab} onStageChange={setShotsTab} />
-          <div className="grid min-h-0 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
-            <ShotPreview sequence={sequence} selectedShot={selectedShot} stage={shotsTab} />
-            <LayoutPreview seq={sequence.seq} mode="single" selectedShot={selectedShot} onSelect={selectShot} />
-          </div>
+          <ShotTable sequence={sequence} selectedShot={selectedShot} onSelect={selectShot} stage="image" />
+          <ShotPreview sequence={sequence} selectedShot={selectedShot} stage="image" />
         </div>
-        {shotsTab === 'image' && imageScene && <Timeline scene={imageScene} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={changeDuration} />}
+        {imageScene && <Timeline scene={imageScene} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={changeDuration} />}
       </div>
     ) : nav === 'Conti' || nav === 'Shots' ? (
       <div className={`grid min-h-0 flex-1 gap-3 p-3 pt-0 ${sequence && selectedShot ? 'grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
@@ -210,14 +216,26 @@ function Shell() {
                 <ShotDetail scene={scene!} sequence={sequence} selectedShot={selectedShot} onSelect={selectShot} />
               )}
             </div>
-            {sequence ? <LayoutPreview seq={sequence.seq} mode="single" selectedShot={selectedShot} onSelect={selectShot} /> : <SheetPreview scene={scene!} selectedShot={selectedShot} onSelect={selectShot} />}
+            {sequence ? (
+              <LayoutPreview
+                seq={sequence.seq}
+                mode="single"
+                selectedShot={selectedShot}
+                onSelect={selectShot}
+                extra={
+                  <button data-testid="sheet-open" onClick={() => setSheetOpen(true)} title="시트 전체를 크게 보고 저장" className="flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[11px] text-muted hover:text-ink">
+                    <Maximize2 size={11} /> 크게 보기·저장
+                  </button>
+                }
+              />
+            ) : (
+              <SheetPreview scene={scene!} selectedShot={selectedShot} onSelect={selectShot} />
+            )}
           </div>
         )}
         {sequence && selectedShot && <VersionsBar sequence={sequence} selectedShot={selectedShot} />}
         <Timeline scene={scene!} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={sequence ? changeDuration : undefined} />
       </div>
-    ) : nav === 'Conti Export' && sequence ? (
-      <LayoutView selectedShot={selectedShot} onSelect={selectShot} scene={scene} sequence={sequence} />
     ) : nav === 'Publish' && sequence ? (
       <PublishView
         onGoShot={(no) => {
@@ -253,6 +271,7 @@ function Shell() {
         <Header scene={scene} scenes={scenes} onSwitch={setSeq} projectTitle={project?.title ?? '데모'} />
         {!demo && <MdPendingBar />}
         {showDiag ? <SettingsView /> : nav === 'Sources' ? <SourceView /> : nav === 'Assets' && !demo ? <AssetsView /> : !scene ? <EmptyState /> : workArea}
+        {sheetOpen && sequence && nav === 'Conti' && !showDiag && <SheetViewer seq={sequence.seq} selectedShot={selectedShot} onSelect={selectShot} onClose={() => setSheetOpen(false)} />}
       </main>
 
       {/* 프로젝트가 바뀌면 채팅 패널을 새로 (스레드는 프로젝트마다 따로 저장된다) */}

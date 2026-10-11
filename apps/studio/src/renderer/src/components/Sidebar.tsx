@@ -1,4 +1,4 @@
-import { ChevronsLeft, ChevronsRight, Folder, FileText, Film, Box, ListTree, LayoutGrid, Layers, Send, Settings } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, Folder, FileText, Film, Box, ListTree, LayoutGrid, Image, Send, Settings } from 'lucide-react'
 import type { Scene, NavItem } from '../data/sampleScene'
 import { navItems } from '../data/sampleScene'
 import ProjectSwitcher from './ProjectSwitcher'
@@ -8,7 +8,7 @@ const navIcons: Record<NavItem, typeof Film> = {
   Assets: Box,
   Shots: ListTree,
   Conti: LayoutGrid,
-  'Conti Export': Layers,
+  Images: Image,
   Publish: Send,
 }
 
