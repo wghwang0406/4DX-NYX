@@ -177,6 +177,7 @@ export default function Timeline({ scene, playhead, onSeek, selectedShot, onSele
                 return (
                   <button
                     key={s.no}
+                    data-shot={s.no}
                     onClick={() => onSelect(s.no)}
                     className={`absolute top-1.5 bottom-1.5 overflow-hidden rounded-md border-2 ${
                       selectedShot === s.no ? 'z-10 border-accent' : s.stale ? 'border-warn/70 hover:border-warn' : 'border-line hover:border-muted'

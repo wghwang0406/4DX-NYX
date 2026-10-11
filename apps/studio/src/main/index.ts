@@ -104,6 +104,52 @@ function createWindow(): BrowserWindow {
         app.quit()
       }, 2500)
     })
+  } else if (process.env.CONTI_E2E_IMPORT) {
+    // 시나리오 가져오기 표: 전체 해제 → 0 체크 → 2 체크 → Shift+4 (2~4) → 1 을 앞 씬에 합치기 → 커밋
+    // 기대: 시퀀스 4개(0,2,3,4), 0 에 1 이 합쳐져 lineEnd 가 늘고, 해제된 5 이후는 어디에도 안 붙는다. (CONTI_NAV=Sources 로 띄운다)
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(async () => {
+        const out = process.env.CONTI_E2E_OUT ?? '/tmp/conti-import.json'
+        const js = (c: string) => win.webContents.executeJavaScript(c)
+        const wait = (ms: number) => new Promise((res) => setTimeout(res, ms))
+        const r: Record<string, unknown> = {}
+        const count = () => js(`document.querySelector('[data-testid=import-count]')?.textContent ?? ''`)
+        const commitText = () => js(`document.querySelector('[data-testid=import-commit]')?.textContent ?? ''`)
+        const box = (i: number, shift = false) =>
+          js(`(() => { const c = document.querySelector('tr[data-row="${i}"] input[type=checkbox]'); if (!c) return false; c.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: ${shift} })); return true })()`)
+        try {
+          await js(`(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '시나리오 가져오기'); b?.click(); return !!b })()`)
+          for (let i = 0; i < 40 && !(await js(`!!document.querySelector('[data-testid=import-all]')`)); i++) await wait(250)
+          r.initial = { count: await count(), button: await commitText() }
+          await js(`document.querySelector('[data-testid=import-none]').click()`)
+          await wait(150)
+          r.afterNone = { count: await count(), button: await commitText(), disabled: await js(`document.querySelector('[data-testid=import-commit]').disabled`) }
+          await box(0)
+          await box(2)
+          await wait(100)
+          await box(4, true)
+          await wait(150)
+          r.afterRange = { count: await count(), checked: await js(`[...document.querySelectorAll('tbody tr')].slice(0, 7).map(tr => tr.querySelector('input[type=checkbox]').checked)`) }
+          // 5 는 해제 상태 → 6 의 합치기 버튼은 비활성이어야 한다
+          r.mergeAfterExcludedDisabled = await js(`document.querySelector('[data-testid=merge-6]')?.disabled`)
+          await js(`document.querySelector('[data-testid=merge-1]').click()`)
+          await wait(150)
+          r.afterMerge = { count: await count(), button: await commitText(), label: await js(`document.querySelector('tr[data-row="1"]')?.textContent.slice(0, 40)`) }
+          const seqs: string[] = await js(`[0,2,3,4].map(i => document.querySelector('tr[data-row="' + i + '"] input:not([type])')?.value ?? document.querySelectorAll('tr[data-row="' + i + '"] input')[1].value)`)
+          r.expectSeqs = seqs
+          if (screenshotPath) await writeFile(screenshotPath, (await win.webContents.capturePage()).toPNG())
+          await js(`document.querySelector('[data-testid=import-commit]').click()`)
+          await wait(1500)
+          const made = seqs.map((q) => ipcHandle!.storeSnapshot(q)).filter(Boolean)
+          r.made = made.map((m) => ({ seq: m!.seq, lines: [m!.source?.lineStart, m!.source?.lineEnd] }))
+          r.total = (await ipcHandle!.sequenceCount?.()) ?? null
+        } catch (e) {
+          r.error = String((e as Error).stack ?? e)
+        }
+        await writeFile(out, JSON.stringify(r, null, 2))
+        app.quit()
+      }, 2500)
+    })
   } else if (process.env.CONTI_E2E_PDF) {
     // 빌드된 앱에서 실제 시나리오 PDF 가져오기 (pdf.js worker 포함 여부 검증) — 쉼표로 여러 개
     win.webContents.once('did-finish-load', () => {
@@ -278,12 +324,15 @@ function createWindow(): BrowserWindow {
           const part = await session.defaultSession.fetch(url, { headers: { range: 'bytes=1000-1999' } })
           r.range = { full: full.status, fullType: full.headers.get('content-type'), part: part.status, partLen: (await part.arrayBuffer()).byteLength, contentRange: part.headers.get('content-range') }
           await full.body?.cancel()
+          // Conti 의 원본 영상은 탭 뒤에 있다 (기본은 컷 상세)
+          r.videoTab = await js(`(() => { const b = [...document.querySelectorAll('[data-testid=conti-tabs] button')].find(x => x.textContent.trim() === '원본 영상'); b && b.click(); return !!b })()`)
           await wait(1500)
           r.video0 = await js(`(() => { const v = document.querySelector('video'); return v ? { ready: v.readyState, w: v.videoWidth, dur: Math.round(v.duration*10)/10, t: v.currentTime, err: v.error && v.error.message } : null })()`)
           // 컷 선택 → 탐색
           const target = s.shots.find((x) => !x.deleted && (x.tc?.inMs ?? 0) > 5000) ?? s.shots[1]
-          await js(`(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim().startsWith('${target.no}')); b && b.click(); return !!b })()`)
+          r.clicked = await js(`(() => { const b = document.querySelector('[data-shot="${target.no}"]'); b && b.click(); return !!b })()`)
           await wait(1500)
+          r.afterClick = await js(`({ header: document.querySelector('main')?.innerText.slice(0, 60), tabs: !!document.querySelector('[data-testid=conti-tabs]'), detail: !!document.querySelector('[data-testid=shot-detail]') })`)
           r.seek = { want: (target.tc?.inMs ?? 0) / 1000, video: await js(`(() => { const v = document.querySelector('video'); return v ? { t: Math.round(v.currentTime*100)/100, ready: v.readyState, seeking: v.seeking } : null })()`) }
           // 재생 1.5초
           await js(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }))`)
@@ -384,7 +433,7 @@ function createWindow(): BrowserWindow {
           r.drag = { before, after: shotOf('0010')?.durationSec ?? null }
           // 3) 주석 그리기: 0020 선택 → [주석] → 끌기
           await js(`document.querySelectorAll('[data-shot]').length`)
-          r.selectDom = await js(`(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '0020'); if (!b) return 'no cut'; b.click(); return 'ok' })()`)
+          r.selectDom = await js(`(() => { const b = document.querySelector('[data-shot="0020"]'); if (!b) return 'no cut'; b.click(); return 'ok' })()`)
           await wait(300)
           r.annotateDom = await js(`(async () => {
             const btn = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '주석')
@@ -407,15 +456,35 @@ function createWindow(): BrowserWindow {
           // 주석 닫기
           await js(`(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === '닫기'); b?.click(); return !!b })()`)
           await wait(200)
-          // 4) 재생: Space → 1.2초 → 시간 표시가 바뀌었는가
+          // 3-1) 컷 상세에서 샷사이즈·지문 수정 → 저장되는가
+          await js(`(() => {
+            const sel = document.querySelector('[data-testid=detail-size]')
+            Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(sel, 'ECU')
+            sel.dispatchEvent(new Event('change', { bubbles: true }))
+            const inp = document.querySelector('[data-testid=detail-action]')
+            inp.focus()
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inp, 'QA 지문 수정')
+            inp.dispatchEvent(new Event('input', { bubbles: true }))
+            inp.blur()
+            return true
+          })()`)
+          await wait(700)
+          r.detailEdit = { size: shotOf('0020')?.sizeCode, action: shotOf('0020')?.actionKo }
+          // 4) 미리보기 iframe 안 패널 수
+          r.previewCells = await js(`(() => { const f = document.querySelector('iframe[title=layout]'); return f?.contentDocument?.querySelectorAll('.cell[data-shot]').length ?? -1 })()`)
+          // 5) 재생: Conti 에는 플레이어가 없다 → Conti Export › 애니매틱 미리보기에서 Space → 1.2초 → 시간 표시가 바뀌었는가
+          r.contiHasPlayer = await js(`!!document.querySelector('[data-testid=player-time]')`)
+          await js(`(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === 'Conti Export'); b?.click(); return !!b })()`)
+          await wait(500)
+          await js(`(() => { const b = [...document.querySelectorAll('[data-testid=export-tabs] button')].find(x => x.textContent.trim() === '애니매틱 미리보기'); b?.click(); return !!b })()`)
+          await wait(400)
           const t0 = await js(`document.querySelector('[data-testid=player-time]')?.textContent ?? ''`)
           await js(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }))`)
           await wait(1200)
           const t1 = await js(`document.querySelector('[data-testid=player-time]')?.textContent ?? ''`)
           await js(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }))`)
           r.play = { t0, t1 }
-          // 5) 미리보기 iframe 안 패널 수
-          r.previewCells = await js(`(() => { const f = document.querySelector('iframe[title=layout]'); return f?.contentDocument?.querySelectorAll('.cell[data-shot]').length ?? -1 })()`)
+          if (screenshotPath) await writeFile(screenshotPath.replace(/\.png$/, '_animatic.png'), (await win.webContents.capturePage()).toPNG())
           // 6) Template Lab: 복제 → style.css 수정 → 변경 이벤트·렌더 반영
           const changes: string[] = []
           const orig = win.webContents.send.bind(win.webContents)

@@ -169,6 +169,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
 
   ipcMain.handle('screenplay:importDialog', async (): Promise<ImportPreview | null> => {
     const s = requireStore()
+    // E2E: 파일 대화상자 대신 지정한 파일 (CONTI_E2E_IMPORT)
+    if (process.env.CONTI_E2E_IMPORT) return importFile(s, process.env.CONTI_E2E_IMPORT)
     const r = await dialog.showOpenDialog(getWindow()!, {
       title: '시나리오 가져오기',
       properties: ['openFile'],
@@ -356,6 +358,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
     agentHost: () => host,
     /** 검증용 — 현재 스토어의 시퀀스 */
     storeSnapshot: (seq: string) => store?.getSequence(seq),
+    sequenceCount: async () => store?.listSequences().length ?? 0,
     openProject: async (root: string) => attach(await ProjectStore.open(root), root),
     /** E2E 검증용: 로그인된 AI 로 한 턴 보내고 이벤트를 모아 돌려준다 */
     e2e: async (prompt: string, seq?: string) => {

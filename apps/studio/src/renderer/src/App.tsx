@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import Player from './components/Player'
+import ShotDetail from './components/ShotDetail'
 import SheetPreview from './components/SheetPreview'
 import LayoutPreview from './components/LayoutPreview'
 import Timeline from './components/Timeline'
@@ -69,38 +70,23 @@ function Shell() {
   const sequence = sequences.find((s) => s.seq === scene?.seq) ?? null
 
   const [playing, setPlaying] = useState(false)
+  // Conti 왼쪽 위: 컷 상세(기본) / 원본 영상(영상 입력 시퀀스만). 애니매틱 재생은 Conti Export 로 옮겼다.
+  const [contiTab, setContiTab] = useState<'detail' | 'video'>('detail')
+  const videoTab = !!scene?.video && contiTab === 'video' && nav === 'Conti'
 
   useEffect(() => {
     setSelectedShot(null)
     setPlayhead(0)
     setPlaying(false)
+    setContiTab('detail')
   }, [activeSeq])
 
-  // 자동 애니매틱 재생 — 실제 시간대로 플레이헤드를 민다 (끝나면 멈춤)
-  const duration = scene?.duration ?? 0
-  const last = useRef(0)
-  const videoDriven = !!scene?.video
+  // 원본 영상 탭을 벗어나면 멈춘다
   useEffect(() => {
-    if (!playing || videoDriven) return // 영상 입력이면 플레이어의 <video> 가 플레이헤드를 민다
-    let raf = 0
-    last.current = performance.now()
-    const tick = (now: number) => {
-      const dt = (now - last.current) / 1000
-      last.current = now
-      setPlayhead((p) => {
-        const n = p + dt
-        if (n >= duration) {
-          setPlaying(false)
-          return duration
-        }
-        return n
-      })
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [playing, duration, videoDriven])
+    if (!videoTab) setPlaying(false)
+  }, [videoTab])
 
+  const duration = scene?.duration ?? 0
   const playPause = useCallback(() => {
     setPlaying((v) => {
       if (!v && playhead >= duration - 0.05) setPlayhead(0)
@@ -108,8 +94,9 @@ function Shell() {
     })
   }, [playhead, duration])
 
-  // Space = 재생/멈춤 (입력란에서는 무시)
+  // Space = 원본 영상 재생/멈춤 (원본 영상 탭에서만, 입력란에서는 무시)
   useEffect(() => {
+    if (!videoTab) return
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (e.code !== 'Space' || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return
@@ -118,7 +105,7 @@ function Shell() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [playPause])
+  }, [playPause, videoTab])
 
   // 프로젝트가 바뀌면 선택·설정 화면을 접는다
   useEffect(() => {
@@ -162,6 +149,12 @@ function Shell() {
     [scene],
   )
 
+  // Conti 에서 아무 컷도 안 골랐으면 첫 컷을 고른다 (컷 상세가 비지 않게). 위의 씬 전환 초기화보다 뒤에 둔다.
+  const firstShot = scene?.shots[0]?.no
+  useEffect(() => {
+    if (nav === 'Conti' && !selectedShot && firstShot) selectShot(firstShot)
+  }, [nav, selectedShot, firstShot, selectShot])
+
   const changeDuration = useCallback(
     (shotId: string, sec: number) => {
       if (sequence) void window.conti.api.sequence.updateShot(sequence.seq, shotId, { durationSec: sec })
@@ -181,7 +174,27 @@ function Shell() {
           </div>
         ) : (
           <div className="grid min-h-0 grid-cols-2 gap-3">
-            <Player scene={scene!} playhead={playhead} onSeek={setPlayhead} playing={playing} onPlayPause={playPause} onEnded={() => setPlaying(false)} sequence={sequence} selectedShot={selectedShot} />
+            <div className="flex min-h-0 flex-col gap-1.5">
+              {scene?.video && (
+                <div className="flex shrink-0 gap-1 text-[11.5px]" data-testid="conti-tabs">
+                  {(
+                    [
+                      ['detail', '컷 상세'],
+                      ['video', '원본 영상'],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <button key={k} onClick={() => setContiTab(k)} className={`rounded-md px-2.5 py-0.5 ${contiTab === k ? 'bg-accent-soft text-ink' : 'text-muted hover:text-ink'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {videoTab ? (
+                <Player scene={scene!} playhead={playhead} onSeek={setPlayhead} playing={playing} onPlayPause={playPause} onEnded={() => setPlaying(false)} sequence={sequence} />
+              ) : (
+                <ShotDetail scene={scene!} sequence={sequence} selectedShot={selectedShot} onSelect={selectShot} />
+              )}
+            </div>
             {sequence ? <LayoutPreview seq={sequence.seq} mode="single" selectedShot={selectedShot} onSelect={selectShot} /> : <SheetPreview scene={scene!} selectedShot={selectedShot} onSelect={selectShot} />}
           </div>
         )}
@@ -189,7 +202,7 @@ function Shell() {
         <Timeline scene={scene!} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={sequence ? changeDuration : undefined} />
       </div>
     ) : nav === 'Conti Export' && sequence ? (
-      <LayoutView selectedShot={selectedShot} onSelect={selectShot} />
+      <LayoutView selectedShot={selectedShot} onSelect={selectShot} scene={scene} sequence={sequence} />
     ) : nav === 'Publish' && sequence ? (
       <PublishView
         onGoShot={(no) => {

@@ -61,10 +61,10 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
                   <b>Assets · Shots</b> — 오른쪽 AI 채팅에 "이 씬 샷 분해해줘"처럼 말하면 됩니다. 슬래시 명령은 필요 없습니다.
                 </li>
                 <li>
-                  <b>Conti</b> — 생성은 항상 승인 카드를 거칩니다. "1장만 먼저"로 그림체를 확인할 수 있습니다.
+                  <b>Conti</b> — 컷을 골라 크게 보고 주석·사이즈·앵글을 고칩니다. 생성은 항상 승인 카드를 거치고, "1장만 먼저"로 그림체를 확인할 수 있습니다.
                 </li>
                 <li>
-                  <b>Conti Export · Publish</b> — PDF·PNG·애니매틱을 뽑고, 사내 뷰어 링크로 공유해 코멘트를 받습니다.
+                  <b>Conti Export · Publish</b> — 이미지가 다 되면 애니매틱으로 흐름을 확인하고 PDF·PNG·mp4 를 뽑아, 사내 뷰어 링크로 공유해 코멘트를 받습니다.
                 </li>
               </ol>
               <p className="mt-4 text-[12px] text-muted">다음 몇 단계에서 로그인과 필요한 도구를 점검합니다. 2–3분이면 끝납니다.</p>

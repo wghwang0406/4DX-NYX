@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileDown, Images, Film, FlaskConical, FolderOpen, Copy, Loader2, CheckCircle2, AlertTriangle, ExternalLink } from 'lucide-react'
+import type { Sequence } from '@conti/domain'
 import LayoutPreview from '../components/LayoutPreview'
+import Player from '../components/Player'
+import type { Scene } from '../data/sampleScene'
 import { useProject } from '../state/project'
 import type { ExportKind, ExportRecord, TemplateInfo } from '../../../shared/layout-ipc'
 
@@ -8,8 +11,9 @@ const KIND_LABEL: Record<ExportKind, string> = { pdf: 'PDF', png: 'PNG', animati
 const STATUSES = ['작업 중', '컨펌용', '최종']
 
 /** 레이아웃 — 실제 템플릿으로 시퀀스 전체 시트를 보고 PDF/PNG/애니매틱을 뽑는다. Template Lab 에서 템플릿을 고치면 바로 다시 그린다. */
-export default function LayoutView({ selectedShot, onSelect }: { selectedShot: string | null; onSelect: (no: string) => void }) {
+export default function LayoutView({ selectedShot, onSelect, scene, sequence }: { selectedShot: string | null; onSelect: (no: string) => void; scene?: Scene | null; sequence?: Sequence | null }) {
   const { seq, project } = useProject()
+  const [view, setView] = useState<'sheet' | 'animatic'>(() => (new URLSearchParams(window.location.search).get('animatic') === '1' ? 'animatic' : 'sheet'))
   const [templates, setTemplates] = useState<TemplateInfo[]>([])
   const [lab, setLab] = useState(() => new URLSearchParams(window.location.search).get('lab') === '1')
   const [labTemplate, setLabTemplate] = useState<string | undefined>()
@@ -30,6 +34,9 @@ export default function LayoutView({ selectedShot, onSelect }: { selectedShot: s
   useEffect(() => {
     void loadHistory()
   }, [loadHistory])
+
+  const animatic = view === 'animatic' && !lab && !!scene
+  const clock = useAnimaticClock(scene ?? null, animatic, selectedShot)
 
   const current = templates.find((t) => t.current) ?? templates.find((t) => t.id === project?.layoutTemplateId)
   const previewId = lab ? (labTemplate ?? current?.id) : current?.id
@@ -124,7 +131,26 @@ export default function LayoutView({ selectedShot, onSelect }: { selectedShot: s
             )}
           </div>
         )}
+        {!lab && scene && (
+          <div className="-mb-1.5 flex shrink-0 gap-1 text-[11.5px]" data-testid="export-tabs">
+            {(
+              [
+                ['sheet', '시트'],
+                ['animatic', '애니매틱 미리보기'],
+              ] as const
+            ).map(([k, label]) => (
+              <button key={k} onClick={() => setView(k)} className={`rounded-md px-2.5 py-0.5 ${view === k ? 'bg-accent-soft text-ink' : 'text-muted hover:text-ink'}`}>
+                {label}
+              </button>
+            ))}
+            {animatic && <span className="ml-2 self-center text-muted">콘티 이미지를 컷 길이대로 이어 봅니다 · 이미지 생성이 끝나고 영상으로 넘어가기 전 확인용 · Space 재생</span>}
+          </div>
+        )}
+        {animatic && clock.scene ? (
+          <Player scene={clock.scene} playhead={clock.playhead} onSeek={clock.seek} playing={clock.playing} onPlayPause={clock.playPause} onEnded={clock.stop} sequence={sequence} title={clock.scene.estimated ? '애니매틱 (추정 길이)' : '애니매틱'} />
+        ) : (
         <LayoutPreview seq={sample ? null : seq} sample={lab && sample} templateId={previewId} mode="all" selectedShot={selectedShot} onSelect={onSelect} title={lab ? `Template Lab — ${labT?.name ?? ''}` : '시트 전체'} className="flex-1" />
+        )}
       </div>
 
       <aside className="flex w-[280px] shrink-0 flex-col gap-3">
@@ -188,4 +214,69 @@ export default function LayoutView({ selectedShot, onSelect }: { selectedShot: s
       </aside>
     </div>
   )
+}
+
+/** 애니매틱 미리보기 시계: 콘티 이미지를 컷 길이대로 넘긴다(영상 입력이어도 원본 영상이 아니라 콘티 이미지). */
+function useAnimaticClock(scene: Scene | null, active: boolean, selectedShot: string | null) {
+  const imgScene = useMemo(() => (scene ? { ...scene, video: undefined } : null), [scene])
+  const [playhead, setPlayhead] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const duration = imgScene?.duration ?? 0
+  const last = useRef(0)
+
+  // 다른 씬이 되면 처음으로, 탭을 떠나면 멈춤
+  useEffect(() => {
+    setPlayhead(0)
+    setPlaying(false)
+  }, [scene?.seq])
+  useEffect(() => {
+    if (!active) setPlaying(false)
+  }, [active])
+  // 고른 컷에서 시작
+  useEffect(() => {
+    const sh = imgScene?.shots.find((x) => x.no === selectedShot)
+    if (sh && !playing) setPlayhead(sh.tIn + 0.001)
+  }, [selectedShot]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!playing) return
+    let raf = 0
+    last.current = performance.now()
+    const tick = (now: number) => {
+      const dt = (now - last.current) / 1000
+      last.current = now
+      setPlayhead((p) => {
+        const n = p + dt
+        if (n >= duration) {
+          setPlaying(false)
+          return duration
+        }
+        return n
+      })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing, duration])
+
+  const playPause = useCallback(() => {
+    setPlaying((v) => {
+      if (!v && playhead >= duration - 0.05) setPlayhead(0)
+      return !v
+    })
+  }, [playhead, duration])
+
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (e.code !== 'Space' || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return
+      e.preventDefault()
+      playPause()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active, playPause])
+
+  return { scene: imgScene, playhead, playing, seek: setPlayhead, playPause, stop: () => setPlaying(false) }
 }
