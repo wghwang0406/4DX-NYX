@@ -104,6 +104,25 @@ function createWindow(): BrowserWindow {
         app.quit()
       }, 2500)
     })
+  } else if (process.env.CONTI_E2E_PDF) {
+    // 빌드된 앱에서 실제 시나리오 PDF 가져오기 (pdf.js worker 포함 여부 검증) — 쉼표로 여러 개
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(async () => {
+        const out = process.env.CONTI_E2E_OUT ?? '/tmp/conti-pdf.json'
+        const r: Record<string, unknown> = {}
+        for (const f of process.env.CONTI_E2E_PDF!.split(',')) {
+          const t0 = Date.now()
+          try {
+            const p = await ipcHandle!.importPreview(f)
+            r[f.split('/').pop()!] = { scenes: p.scenes.length, lines: p.lineCount, first: p.scenes[0]?.headingRaw, ms: Date.now() - t0 }
+          } catch (e) {
+            r[f.split('/').pop()!] = { error: String((e as Error).message) }
+          }
+        }
+        await writeFile(out, JSON.stringify(r, null, 2))
+        app.quit()
+      }, 2500)
+    })
   } else if (process.env.CONTI_E2E_SWITCH) {
     // 프로젝트 전환: 사이드바 메뉴 열기(캡처) → 최근 목록의 다른 프로젝트 클릭 → 확인 → 닫기 → 시작 화면
     win.webContents.once('did-finish-load', () => {

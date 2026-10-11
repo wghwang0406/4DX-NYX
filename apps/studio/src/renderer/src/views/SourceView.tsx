@@ -59,7 +59,7 @@ export default function SourceView() {
       <section className="rounded-lg border border-line bg-panel p-4">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[14px] font-semibold">소스</div>
+            <div className="text-[14px] font-semibold">Sources</div>
             <div className="text-[12px] text-muted">시나리오(PDF / .txt / .md)를 넣으면 씬을 나눠 시퀀스로 만듭니다. 영상 콘티(애니매틱·샷별 클립·롱테이크·대사 음성)는 컷과 대사를 찾아 원본 프레임으로 콘티를 채웁니다.</div>
           </div>
           <div className="flex shrink-0 gap-2">

@@ -350,6 +350,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
     video,
     publish,
     appInfo,
+    /** 검증용 — 대화상자 없이 시나리오 파일 미리보기 (PDF·txt) */
+    importPreview: (file: string) => importFile(requireStore(), file),
     /** 검증용 — 에이전트 호스트 (승인 요청·미리보기) */
     agentHost: () => host,
     /** 검증용 — 현재 스토어의 시퀀스 */
