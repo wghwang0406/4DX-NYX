@@ -11,6 +11,7 @@ import { assetJobCount } from '@conti/domain'
 import { JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, engineFor, planRequest, type JobEvent, type JobRecord } from '@conti/genengine'
 import type { AgentAvailability, AgentUiEvent, ChatMessage, JobView, SpendPreview, SpendRequestView, ThreadInfo } from '../shared/agent-ipc'
 import type { FeedbackItem } from '../shared/publish-ipc'
+import { log } from './log'
 
 interface LiveThread {
   info: ThreadInfo
@@ -228,6 +229,7 @@ export class AgentHost {
     try {
       for await (const e of session.events) await this.handle(live, e)
     } catch (err) {
+      log('error', `agent thread ${threadId} pump failed: ${(err as Error).message}`)
       this.emit({ t: 'error', threadId, kind: 'crash', message: (err as Error).message })
     }
   }
@@ -281,9 +283,12 @@ export class AgentHost {
         this.emit({ t: 'turn_end', threadId })
         break
       case 'error':
+        // 채팅이 조용히 끊기는 경우를 나중에 알 수 있게 로그에도 남긴다 (진단 내보내기에 포함)
+        log('warn', `agent ${live.info.agent} thread ${threadId} error [${e.kind}]: ${e.message}`)
         this.emit({ t: 'error', threadId, kind: e.kind, message: e.message })
         break
       case 'exit':
+        log('info', `agent ${live.info.agent} thread ${threadId} exited (code ${e.code ?? 'null'})`)
         live.session = null
         break
     }

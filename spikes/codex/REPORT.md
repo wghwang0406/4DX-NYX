@@ -146,3 +146,9 @@ CONTI_MCP_TOKEN=<랜덤토큰> codex exec \
 
 **앱 설계 반영:** thread id 를 받자마자 작업 기록에 남기고(`codex:<thread>`), 끝나면 그 폴더의 png 를 회수한다.
 앱이 꺼져도 폴더에 결과가 남으므로 재시작 때 회수 가능. 로그인 후 실제 1장으로 `exec --json` 의 이미지 항목 형태를 다시 확인할 것.
+
+**실제 생성 확인 (2026-10-11 21:08, 로그인 후 1장)** — 샘플 `samples/imagegen_exec_ok.jsonl`
+- `exec --json` 에는 **이미지 항목이 나오지 않는다**: `thread.started` → `item.completed{agent_message, text:""}` → `turn.completed{usage}` 뿐. 종료코드 0, 35초.
+- 파일은 예상대로 `~/.codex/generated_images/<thread_id>/exec-<uuid>.png` (3.2MB). → 앱의 "thread 폴더 회수" 방식이 맞다.
+- 크기: "wide landscape 16:9 (about 1672x941)" 요청에 **1536×1024(3:2)**. exec 의 image_gen 은 1024², 1536×1024, 1024×1536 위주로 보인다. 콘티 칸은 object-contain 이라 표시엔 문제없음.
+- 사용량: 입력 38.6k(캐시 31.2k)·출력 66 토큰 — 지시문이 짧아도 Codex 기본 컨텍스트가 크다.
