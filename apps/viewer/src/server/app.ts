@@ -107,6 +107,7 @@ export function mapToShot(m: Manifest, c: { kind: CommentKind; page?: number; x?
 
 export function createViewerServer(cfg: ViewerConfig): ViewerServer {
   const db = new Db(join(cfg.dataDir, 'nyx.db'))
+  const startedAt = Date.now()
   const blobs = new BlobStore(join(cfg.dataDir, 'blobs'))
   const maxChunk = cfg.maxChunk ?? 16 * 1024 * 1024
   let http: Server | null = null
@@ -310,6 +311,35 @@ export function createViewerServer(cfg: ViewerConfig): ViewerServer {
     }
 
     // ── 앱 배포 (서명 없는 사내 배포 — 새 버전 알림 + 내려받기) ──
+    // 현황 (서버 PC 주소로 열어 보는 관리 화면) — 리뷰 링크가 보이므로 게시 토큰 필요
+    if (path === '/api/admin/overview' && method === 'GET') {
+      requireStudio(req)
+      const o = db.overview()
+      const now = Date.now()
+      return send(res, 200, {
+        server: { name: 'nyx-viewer', version: cfg.version ?? '0.0.1', dropbox: !!cfg.dropbox, startedAt, publicUrl: cfg.publicUrl ?? null, blobBytes: o.blobBytes, blobCount: o.blobCount },
+        projects: o.projects.map((p) => ({
+          id: p.id,
+          code: p.code,
+          title: p.title,
+          publications: p.pubs.map((x) => ({
+            id: x.id,
+            seq: x.seq,
+            version: x.version,
+            label: x.label,
+            status: x.status,
+            createdAt: x.created_at,
+            link: `/r/${x.token}`,
+            closed: !!x.revoked || (x.expires_at != null && x.expires_at < now),
+            open: x.open,
+            total: x.total,
+            verdict: x.verdict,
+            archive: x.archive_status,
+          })),
+        })),
+      })
+    }
+
     if (path === '/api/app/latest' && method === 'GET') {
       let latest: Record<string, { version: string; file: string; notes?: string; size?: number }> = {}
       try {

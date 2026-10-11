@@ -182,6 +182,21 @@ describe('publish → review → feedback loop', () => {
     expect((await fetch(`${base}/api/r/${pub.token}`)).status).toBe(410)
     expect((await fetch(`${base}/api/r/${pub2.token}`)).status).toBe(200)
   })
+
+  it('overview (server status page) needs the team token and lists publications with comment counts and closed links', async () => {
+    expect((await fetch(`${base}/api/admin/overview`)).status).toBe(401)
+    const o = await (await fetch(`${base}/api/admin/overview`, { headers: auth })).json()
+    expect(o.server).toMatchObject({ name: 'nyx-viewer', dropbox: true })
+    expect(o.server.blobCount).toBeGreaterThan(0)
+    const proj = o.projects.find((p: { id: string }) => p.id === 'proj-1')
+    const v1 = proj.publications.find((x: { version: number }) => x.version === 1)
+    const v2 = proj.publications.find((x: { version: number }) => x.version === 2)
+    expect(v1).toMatchObject({ closed: true, verdict: 'changes' })
+    expect(v1.total).toBeGreaterThanOrEqual(5)
+    expect(v2).toMatchObject({ closed: false, link: expect.stringMatching(/^\/r\//) })
+    // 루트 주소는 현황 화면(웹) — 토큰 없이도 페이지 자체는 열린다
+    expect((await fetch(`${base}/`)).status).toBe(200)
+  })
 })
 
 describe('releases & backups', () => {

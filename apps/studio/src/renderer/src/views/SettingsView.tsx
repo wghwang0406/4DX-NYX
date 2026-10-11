@@ -265,7 +265,7 @@ export function ServerSettings() {
   return (
     <section className="rounded-lg border border-line bg-panel p-4 text-[12.5px]">
       <div className="text-[14px] font-semibold">게시 서버</div>
-      <div className="mt-0.5 text-[12px] text-muted">사내 뷰어 서버에 시트·PDF·영상을 올리고 링크로 공유합니다. 서버가 Dropbox 팀 폴더에 보관하므로 이 맥에는 Dropbox 설정이 필요 없습니다.</div>
+      <div className="mt-0.5 text-[12px] text-muted">사내 뷰어 서버에 시트·PDF·영상을 올리고 링크로 공유합니다. 서버 PC 에서 nyx-viewer 폴더의 start.command(윈도우는 start.bat)를 켜면 터미널에 주소와 토큰이 나옵니다 — 그 두 값을 여기에 넣으세요.</div>
       <div className="mt-3 grid max-w-xl grid-cols-[90px_1fr] items-center gap-2">
         <span className="text-muted">서버 주소</span>
         <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://nyx.사내:8787" className="rounded border border-line bg-bg px-2 py-1 font-mono text-[12px] outline-none focus:border-accent" />
@@ -275,6 +275,14 @@ export function ServerSettings() {
       <div className="mt-3 flex items-center gap-2">
         <button disabled={busy || !url} onClick={() => void save()} className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-50">
           {busy ? <Loader2 size={13} className="animate-spin" /> : null} 저장하고 연결 확인
+        </button>
+        <button
+          disabled={!url}
+          onClick={() => void window.conti.auth.openUrl(url.replace(/\/+$/, '') + '/')}
+          title="서버 현황 화면을 브라우저로 — 게시 토큰을 넣으면 게시된 판 목록이 보입니다"
+          className="flex items-center gap-1 rounded-md border border-line px-3 py-1.5 text-[12px] hover:bg-panel-2 disabled:opacity-50"
+        >
+          <ExternalLink size={12} /> 현황 열기
         </button>
         {!encrypted && <span className="text-[11px] text-warn">이 기기에선 키체인 암호화를 쓸 수 없어 토큰이 평문으로 저장됩니다</span>}
       </div>

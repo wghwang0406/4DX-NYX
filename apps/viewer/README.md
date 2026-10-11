@@ -5,6 +5,11 @@
 
 ## 띄우기
 
+**서버 PC 에 바로 (권장, 저장소·pnpm 불필요 — Node 22.5+ 만):**
+`corepack pnpm exec tsx tools/pack-viewer.mts` → `release/nyx-viewer.zip` 을 서버 PC 에 풀고 `start.command`(맥)·`start.bat`(윈도우) 더블클릭.
+처음 켜면 게시 토큰을 만들어 `nyx-viewer.env` 에 저장하고, 터미널에 **현황 주소(http://사내IP:8787/)와 토큰**을 보여준다.
+다른 PC 브라우저로 그 주소를 열고 토큰을 넣으면 현황(서버 상태·게시된 판·코멘트 수), 스튜디오 설정 › 게시 서버에도 같은 주소·토큰.
+
 Docker (사내 서버):
 
 ```bash

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Film, MessageSquare, Video, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import { Film, MessageSquare, Video, ZoomIn, ZoomOut, Maximize2, Play, Pause, SkipBack } from 'lucide-react'
 import type { Scene } from '../data/sampleScene'
 import { fmt } from '../lib/time'
 
@@ -11,6 +11,9 @@ interface Props {
   onSelect: (no: string) => void
   /** 텍스트 입력(추정 길이)일 때 컷 오른쪽 끝을 끌어 길이를 바꾼다 */
   onDurationChange?: (shotId: string, sec: number) => void
+  /** 재생 (컷 길이대로 플레이헤드가 흐르고 화면이 컷마다 넘어간다) */
+  playing?: boolean
+  onPlayPause?: () => void
 }
 
 const LABEL_W = 112
@@ -20,7 +23,7 @@ const ZOOMS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16]
  * 씬 타임라인 — 컷 / 대사 / 카메라 트랙. 확대(버튼·⌘+휠)하면 가로로 스크롤되고 트랙 이름은 왼쪽에 고정된다.
  * 텍스트 입력이면 컷 오른쪽 끝을 끌어 길이를 바꾼다.
  */
-export default function Timeline({ scene, playhead, onSeek, selectedShot, onSelect, onDurationChange }: Props) {
+export default function Timeline({ scene, playhead, onSeek, selectedShot, onSelect, onDurationChange, playing, onPlayPause }: Props) {
   const trackRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [zoom, setZoom] = useState(1)
@@ -116,19 +119,58 @@ export default function Timeline({ scene, playhead, onSeek, selectedShot, onSele
   const tickStep = [0.5, 1, 2, 4, 5, 10, 15, 30, 60, 120].find((v) => v >= raw) ?? 300
   const ticks = Array.from({ length: Math.floor(total / tickStep) + 1 }, (_, i) => i * tickStep)
 
-  function seekFromEvent(e: React.MouseEvent) {
+  function seekAt(clientX: number) {
     const el = trackRef.current
     if (!el) return
     const r = el.getBoundingClientRect()
-    const x = Math.min(Math.max(e.clientX - r.left, 0), r.width)
+    const x = Math.min(Math.max(clientX - r.left, 0), r.width)
     onSeek((x / r.width) * total)
+  }
+  // 눈금 줄·플레이헤드 손잡이를 잡고 끌면 계속 따라간다 (포인터 캡처 — 창 밖으로 나가도 놓을 때까지)
+  const scrubbing = useRef(false)
+  const scrubHandlers = {
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.button !== 0) return
+      scrubbing.current = true
+      try {
+        ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      } catch {
+        /* 합성 이벤트 등 캡처 불가 — 끌기는 그대로 */
+      }
+      if (playing) onPlayPause?.()
+      seekAt(e.clientX)
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (scrubbing.current) seekAt(e.clientX)
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      scrubbing.current = false
+      try {
+        ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
+      } catch {
+        /* */
+      }
+    },
   }
 
   return (
     <section className="flex min-h-0 flex-col rounded-lg border border-line bg-panel">
       <div className="flex h-9 shrink-0 items-center justify-between px-3">
-        <span className="text-[12.5px] font-medium">
-          {scene.seq} 타임라인 <span className="ml-1 text-[11px] font-normal text-muted">{scene.shots.length}컷 · {fmt(scene.duration)}</span>
+        <span className="flex items-center gap-2 text-[12.5px] font-medium">
+          {onPlayPause && (
+            <span className="flex items-center gap-0.5" data-testid="timeline-transport">
+              <button onClick={() => onSeek(0)} title="처음으로" className="rounded p-1 text-muted hover:bg-panel-2 hover:text-ink">
+                <SkipBack size={13} />
+              </button>
+              <button data-testid="timeline-play" onClick={onPlayPause} title={playing ? '멈춤 (Space)' : '재생 (Space) — 컷 길이대로 넘어갑니다'} className="rounded bg-accent p-1 text-white hover:brightness-110">
+                {playing ? <Pause size={13} /> : <Play size={13} />}
+              </button>
+              <span className="ml-1 w-[92px] font-mono text-[11px] font-normal text-muted" data-testid="timeline-time">
+                {fmt(Math.min(playhead, scene.duration))} / {fmt(scene.duration)}
+              </span>
+            </span>
+          )}
+          {scene.seq} 타임라인 <span className="text-[11px] font-normal text-muted">{scene.shots.length}컷{onPlayPause ? '' : ` · ${fmt(scene.duration)}`}</span>
         </span>
         <div className="flex items-center gap-1 text-muted">
           <button onClick={() => step(-1)} disabled={zoom <= 1} title="축소" className="rounded p-1 hover:bg-panel-2 hover:text-ink disabled:opacity-30">
@@ -157,14 +199,15 @@ export default function Timeline({ scene, playhead, onSeek, selectedShot, onSele
           {/* 눈금 */}
           <div className="flex h-7 shrink-0 border-b border-line">
             <div style={{ width: LABEL_W }} className="sticky left-0 z-30 shrink-0 bg-panel" />
-            <div ref={trackRef} onClick={seekFromEvent} className="relative flex-1 cursor-pointer">
+            <div ref={trackRef} {...scrubHandlers} data-testid="timeline-ruler" className="relative flex-1 cursor-ew-resize touch-none select-none" title="끌어서 이동">
               {ticks.map((t) => (
                 <div key={t} className="absolute top-0 h-full border-l border-line" style={{ left: pct(t) }}>
                   <span className="absolute top-1.5 left-1 font-mono text-[10px] text-muted">{fmt(t)}</span>
                 </div>
               ))}
-              <div className="absolute -top-0.5 z-20 -translate-x-1/2 rounded bg-accent px-1.5 py-0.5 font-mono text-[10px] text-white" style={{ left: pct(Math.min(playhead, total)) }}>
+              <div className="pointer-events-none absolute -top-0.5 z-20 -translate-x-1/2 rounded bg-accent px-1.5 py-0.5 font-mono text-[10px] text-white shadow" style={{ left: pct(Math.min(playhead, total)) }}>
                 {fmt(playhead)}
+                <span className="absolute left-1/2 top-full -translate-x-1/2 border-x-[5px] border-t-[6px] border-x-transparent border-t-accent" />
               </div>
             </div>
           </div>

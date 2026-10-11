@@ -179,6 +179,41 @@ function createWindow(): BrowserWindow {
         app.quit()
       }, 2500)
     })
+  } else if (process.env.CONTI_E2E_TIMELINE) {
+    // 타임라인 재생바: 눈금 끌기 → 플레이헤드·보이는 컷이 바뀜 / ▶ 재생 → 흐르고 컷이 넘어감 / Space 멈춤. Conti 와 Images 둘 다.
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(async () => {
+        const out = process.env.CONTI_E2E_OUT ?? '/tmp/conti-timeline.json'
+        const js = (c: string) => win.webContents.executeJavaScript(c)
+        const wait = (ms: number) => new Promise((res) => setTimeout(res, ms))
+        const r: Record<string, unknown> = {}
+        const state = () => js(`({ time: document.querySelector('[data-testid=timeline-time]')?.textContent, shot: document.querySelector('[data-testid=shot-detail] .text-accent, [data-testid=shot-preview] .text-accent')?.textContent, playing: !!document.querySelector('[data-testid=timeline-play] svg.lucide-pause') })`)
+        const scrub = (from: number, to: number) =>
+          js(`(() => { const el = document.querySelector('[data-testid=timeline-ruler]'); const b = el.getBoundingClientRect(); const ev = (t, f) => el.dispatchEvent(new PointerEvent(t, { bubbles: true, clientX: b.left + b.width * f, clientY: b.top + 5, button: 0, pointerId: 7 })); ev('pointerdown', ${from}); ev('pointermove', (${from} + ${to}) / 2); ev('pointermove', ${to}); ev('pointerup', ${to}); return true })()`)
+        try {
+          for (const nav of ['Conti', 'Images']) {
+            await js(`[...document.querySelectorAll('button')].find(x => x.textContent.trim() === '${nav}')?.click()`)
+            await wait(700)
+            const s0 = await state()
+            await scrub(0.1, 0.6)
+            await wait(300)
+            const s1 = await state()
+            await js(`document.querySelector('[data-testid=timeline-play]').click()`)
+            await wait(1600)
+            const s2 = await state()
+            await js(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', bubbles: true }))`)
+            await wait(300)
+            const s3 = await state()
+            r[nav] = { start: s0, afterScrub: s1, playing: s2, afterSpace: s3 }
+            if (process.env.CONTI_E2E_SHOTDIR) await writeFile(join(process.env.CONTI_E2E_SHOTDIR, `timeline_${nav}.png`), (await win.webContents.capturePage()).toPNG())
+          }
+        } catch (e) {
+          r.error = String((e as Error).stack ?? e)
+        }
+        await writeFile(out, JSON.stringify(r, null, 2))
+        app.quit()
+      }, 2500)
+    })
   } else if (process.env.CONTI_E2E_PDF) {
     // 빌드된 앱에서 실제 시나리오 PDF 가져오기 (pdf.js worker 포함 여부 검증) — 쉼표로 여러 개
     win.webContents.once('did-finish-load', () => {

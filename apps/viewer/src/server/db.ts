@@ -96,6 +96,25 @@ export class Db {
     if (!sets.length) return
     this.db.prepare(`UPDATE publications SET ${sets.join(', ')} WHERE id=?`).run(...vals, id)
   }
+  /** 현황 화면용 — 프로젝트별 게시 판 + 코멘트 수 + 마지막 판정. 파일 총량. */
+  overview(): {
+    projects: Array<{ id: string; code: string; title: string; pubs: Array<PubRow & { open: number; total: number; verdict: string | null }> }>
+    blobBytes: number
+    blobCount: number
+  } {
+    const projects = this.db.prepare('SELECT id, code, title FROM projects ORDER BY created_at DESC').all() as Array<{ id: string; code: string; title: string }>
+    const out = projects.map((p) => ({
+      ...p,
+      pubs: (this.db.prepare('SELECT * FROM publications WHERE project_id=? ORDER BY seq, version DESC').all(p.id) as unknown as PubRow[]).map((pub) => {
+        const c = this.commentCounts(pub.id)
+        const v = this.db.prepare("SELECT verdict FROM comments WHERE publication_id=? AND kind='verdict' ORDER BY created_at DESC LIMIT 1").get(pub.id) as { verdict: string | null } | undefined
+        return { ...pub, ...c, verdict: v?.verdict ?? null }
+      }),
+    }))
+    const b = this.db.prepare('SELECT COALESCE(SUM(size),0) AS bytes, COUNT(*) AS n FROM blobs').get() as { bytes: number; n: number }
+    return { projects: out, blobBytes: b.bytes, blobCount: b.n }
+  }
+
   commentCounts(pubId: string): { open: number; total: number } {
     const r = this.db.prepare("SELECT SUM(CASE WHEN status='open' AND kind != 'verdict' THEN 1 ELSE 0 END) AS open, COUNT(*) AS total FROM comments WHERE publication_id=?").get(pubId) as { open: number | null; total: number }
     return { open: r.open ?? 0, total: r.total }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Maximize2 } from 'lucide-react'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
@@ -87,10 +87,43 @@ function Shell() {
     setContiTab('detail')
   }, [activeSeq])
 
-  // 원본 영상 탭을 벗어나면 멈춘다
+  // 화면·탭을 바꾸면 멈춘다
   useEffect(() => {
-    if (!videoTab) setPlaying(false)
-  }, [videoTab])
+    setPlaying(false)
+  }, [nav, videoTab])
+
+  // 타임라인이 있는 화면(Conti·Images) — 재생은 타임라인이 맡고, 원본 영상 탭이면 플레이어(<video>)가 맡는다
+  const timelineScreen = (nav === 'Conti' || nav === 'Images') && !!scene
+  const timelineScene = nav === 'Images' && imageScene ? imageScene : scene
+  const lastTick = useRef(0)
+  useEffect(() => {
+    if (!playing || videoTab || !timelineScreen) return
+    let raf = 0
+    lastTick.current = performance.now()
+    const end = timelineScene?.duration ?? 0
+    const tick = (now: number) => {
+      const dt = (now - lastTick.current) / 1000
+      lastTick.current = now
+      setPlayhead((p) => {
+        const n = p + dt
+        if (n >= end) {
+          setPlaying(false)
+          return end
+        }
+        return n
+      })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing, videoTab, timelineScreen, timelineScene?.duration])
+
+  // 플레이헤드가 다른 컷 안으로 들어가면 그 컷을 보여준다 (끌기·재생 모두). 컷 클릭은 플레이헤드를 컷 시작으로 옮기므로 그대로 맞는다.
+  useEffect(() => {
+    if (!timelineScreen || !timelineScene) return
+    const under = timelineScene.shots.find((x) => playhead >= x.tIn && playhead < x.tOut) ?? (playhead >= timelineScene.duration ? timelineScene.shots[timelineScene.shots.length - 1] : undefined)
+    if (under && under.no !== selectedShot) setSelectedShot(under.no)
+  }, [playhead]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const duration = scene?.duration ?? 0
   const playPause = useCallback(() => {
@@ -100,9 +133,9 @@ function Shell() {
     })
   }, [playhead, duration])
 
-  // Space = 원본 영상 재생/멈춤 (원본 영상 탭에서만, 입력란에서는 무시)
+  // Space = 재생/멈춤 (타임라인이 있는 화면, 입력란에서는 무시)
   useEffect(() => {
-    if (!videoTab) return
+    if (!timelineScreen) return
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (e.code !== 'Space' || /INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable) return
@@ -111,7 +144,7 @@ function Shell() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [playPause, videoTab])
+  }, [playPause, timelineScreen])
 
   // 프로젝트가 바뀌면 선택·설정 화면을 접는다
   useEffect(() => {
@@ -184,7 +217,7 @@ function Shell() {
           <ShotTable sequence={sequence} selectedShot={selectedShot} onSelect={selectShot} stage="image" />
           <ShotPreview sequence={sequence} selectedShot={selectedShot} stage="image" />
         </div>
-        {imageScene && <Timeline scene={imageScene} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={changeDuration} />}
+        {imageScene && <Timeline scene={imageScene} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={changeDuration} playing={playing} onPlayPause={playPause} />}
       </div>
     ) : nav === 'Conti' || nav === 'Shots' ? (
       <div className={`grid min-h-0 flex-1 gap-3 p-3 pt-0 ${sequence && selectedShot ? 'grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'grid-rows-[minmax(0,1fr)_minmax(0,1fr)]'}`}>
@@ -234,7 +267,7 @@ function Shell() {
           </div>
         )}
         {sequence && selectedShot && <VersionsBar sequence={sequence} selectedShot={selectedShot} />}
-        <Timeline scene={scene!} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={sequence ? changeDuration : undefined} />
+        <Timeline scene={scene!} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={sequence ? changeDuration : undefined} playing={playing} onPlayPause={playPause} />
       </div>
     ) : nav === 'Publish' && sequence ? (
       <PublishView
