@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Box, User, MapPin, Package, Play, Images, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react'
 import { ASSET_VIEWS, type Asset } from '@conti/domain'
 import { useProject } from '../state/project'
 import { fileUrl } from '../data/adapters'
+import AssetViewer from '../components/AssetViewer'
 
 const KIND_LABEL = { char: '등장체', loc: '배경', prop: '소품' } as const
 const KIND_ICON = { char: User, loc: MapPin, prop: Package } as const
@@ -15,6 +16,9 @@ export default function AssetsView() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [running, setRunning] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  // 크게 보기 (썸네일 클릭) — 다시 생성은 뷰어 안의 버튼으로만
+  const [viewer, setViewer] = useState<{ id: string; view: string } | null>(null)
+  const viewerOpened = useRef(false)
   // 펼친 카드 — 잘린 설명·앵커 전체를 본다 (화면 상태만, 저장 안 함)
   const [open, setOpen] = useState<Set<string>>(new Set())
   const toggle = (id: string) =>
@@ -30,6 +34,13 @@ export default function AssetsView() {
       const list = await window.conti.api.assets.list(ep)
       setAssets(list)
       if (new URLSearchParams(window.location.search).get('expand') === '1') setOpen(new Set(list.map((a) => a.id)))
+      // 캡처용: ?view=@태그:뷰 면 그 이미지를 크게 연다
+      const want = new URLSearchParams(window.location.search).get('view')
+      const hit = want ? list.find((a) => a.tag === want.split(':')[0]) : undefined
+      if (hit && !viewerOpened.current) {
+        viewerOpened.current = true
+        setViewer({ id: hit.id, view: want!.split(':')[1] })
+      }
     } catch {
       setAssets([])
     }
@@ -163,9 +174,10 @@ export default function AssetsView() {
                         return (
                           <button
                             key={v}
-                            onClick={() => void generate([a.id], [v])}
-                            title={ver ? `${VIEW_LABEL[v] ?? v} v${ver.n} — 클릭하면 이 뷰만 다시 생성` : `${VIEW_LABEL[v] ?? v} — 클릭하면 생성`}
-                            className={`relative h-12 flex-1 overflow-hidden rounded border ${ver ? 'border-line bg-black' : 'border-dashed border-line/70 bg-bg'}`}
+                            data-thumb={`${a.tag}:${v}`}
+                            onClick={() => setViewer({ id: a.id, view: v })}
+                            title={ver ? `${VIEW_LABEL[v] ?? v} v${ver.n} — 눌러서 크게 보기` : `${VIEW_LABEL[v] ?? v} — 아직 없음 (눌러서 생성 메뉴)`}
+                            className={`relative h-12 flex-1 overflow-hidden rounded border ${ver ? 'cursor-zoom-in border-line bg-black hover:border-accent' : 'border-dashed border-line/70 bg-bg hover:border-muted'}`}
                           >
                             {ver && <img src={fileUrl(ver.file)} alt={v} className="h-full w-full object-cover" draggable={false} />}
                             <span className="absolute inset-x-0 bottom-0 bg-black/60 text-center text-[9.5px] text-white">{VIEW_LABEL[v] ?? v}</span>
@@ -193,6 +205,19 @@ export default function AssetsView() {
           )
         })}
       </div>
+      {viewer && assets.find((x) => x.id === viewer.id) && (
+        <AssetViewer
+          key={viewer.id}
+          asset={assets.find((x) => x.id === viewer.id)!}
+          view={viewer.view}
+          onClose={() => setViewer(null)}
+          onRegenerate={(views) => {
+            // 승인 카드는 채팅 패널에 뜬다 — 뷰어를 닫아 카드가 보이게
+            setViewer(null)
+            void generate([viewer.id], views)
+          }}
+        />
+      )}
     </div>
   )
 }
