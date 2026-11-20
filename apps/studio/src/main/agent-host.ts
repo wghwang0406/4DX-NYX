@@ -190,7 +190,7 @@ export class AgentHost {
       const pair = KO_PAIRS.find((p) => p.en === field)
       if (!cur || !pair || (cur[pair.en] ?? '').trim() !== seen.en.trim() || (cur[pair.ko] ?? '').trim() !== seen.ko.trim()) return
       const undo = { ko: cur[pair.ko] ?? '', en: cur[pair.en] ?? '', entry: cur.koSync?.[field] ?? null }
-      const r = await this.store.patchAsset(ep, id, { [pair.ko]: next.ko, [pair.en]: next.en, koSync: withKoSync(cur, field, next) })
+      const r = await this.store.patchAsset(ep, id, { [pair.ko]: next.ko, [pair.en]: next.en, koSync: withKoSync(cur, field, next) }, { by: 'auto' })
       if (next.en.trim() !== seen.en.trim()) changes.push({ id, tag: cur.tag, field, changesKo, staleShots: r.staleShots, undo })
       else translated++
     }

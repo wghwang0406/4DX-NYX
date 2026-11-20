@@ -66,12 +66,12 @@ export const assetTools = [
         const { id: _id, ...patch } = asset
         // usedIn 은 합친다 — S41 추출이 S01 에서 뽑은 에셋을 다시 upsert 해도 S01 표시가 남게
         if (patch.usedIn) patch.usedIn = [...new Set([...existing.usedIn, ...patch.usedIn])].sort()
-        const r = await store.patchAsset(ep, existing.id, patch)
+        const r = await store.patchAsset(ep, existing.id, patch, { by: 'ai' })
         return ok({ ok: true, id: r.asset.id, tag: r.asset.tag, rev: r.rev, created: false, staleShots: r.staleShots })
       }
       const given = Object.fromEntries(Object.entries(asset).filter(([, v]) => v !== undefined))
       const merged = Asset.parse({ ...given, id: asset.id ?? randomUUID() })
-      const next = await store.upsertAsset(ep, merged)
+      const next = await store.upsertAsset(ep, merged, { by: 'ai' })
       return ok({ ok: true, id: merged.id, tag: merged.tag, rev: next.rev, created: true, staleShots: 0 })
     },
   }),

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Maximize2 } from 'lucide-react'
+import { assetSeqs } from '@conti/domain'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import Player from './components/Player'
@@ -18,6 +19,7 @@ import SettingsView from './views/SettingsView'
 import AssetsView from './views/AssetsView'
 import SheetViewer from './components/SheetViewer'
 import PublishView from './views/PublishView'
+import VideoView from './views/VideoView'
 import Onboarding from './views/Onboarding'
 import type { UpdateInfo } from '../../shared/app-ipc'
 import { ProjectProvider, useProject } from './state/project'
@@ -68,6 +70,30 @@ function Shell() {
     [demo, sequences, project],
   )
   const activeSeq = demo ? demoScenes[0].seq : seq
+  // 왼쪽 목록의 씬 › 어셋 (N) — 에피소드별 에셋을 불러 두고 바뀔 때마다 다시 센다 (나오는 씬 = usedIn ∪ 샷 태그)
+  const [assetCounts, setAssetCounts] = useState<Record<string, number>>({})
+  useEffect(() => {
+    if (demo) return
+    let live = true
+    const count = async () => {
+      const next: Record<string, number> = {}
+      for (const ep of [...new Set(sequences.map((s) => s.ep))]) {
+        const assets = await window.conti.api.assets.list(ep).catch(() => [])
+        const epSeqs = sequences.filter((s) => s.ep === ep)
+        const seqsOf = assets.map((a) => assetSeqs(a, epSeqs))
+        for (const s of epSeqs) next[s.seq] = seqsOf.filter((xs) => xs.includes(s.seq)).length
+      }
+      if (live) setAssetCounts(next)
+    }
+    void count()
+    const off = window.conti.onStoreChange((c) => {
+      if (c.type === 'assets') void count()
+    })
+    return () => {
+      live = false
+      off()
+    }
+  }, [demo, sequences])
   const scene = scenes.find((s) => s.seq === activeSeq) ?? scenes[0] ?? null
   const sequence = sequences.find((s) => s.seq === scene?.seq) ?? null
 
@@ -269,6 +295,8 @@ function Shell() {
         {sequence && selectedShot && <VersionsBar sequence={sequence} selectedShot={selectedShot} />}
         <Timeline scene={scene!} playhead={playhead} onSeek={setPlayhead} selectedShot={selectedShot} onSelect={selectShot} onDurationChange={sequence ? changeDuration : undefined} playing={playing} onPlayPause={playPause} />
       </div>
+    ) : nav === 'Video' && sequence ? (
+      <VideoView sequence={sequence} selectedShot={selectedShot} onSelect={selectShot} />
     ) : nav === 'Publish' && sequence ? (
       <PublishView
         onGoShot={(no) => {
@@ -290,6 +318,12 @@ function Shell() {
         scenes={scenes}
         activeSeq={scene?.seq ?? ''}
         onSelectScene={setSeq}
+        assetCounts={assetCounts}
+        onOpenAssets={(s) => {
+          setSeq(s)
+          setShowDiag(false)
+          setNav('Assets')
+        }}
         nav={nav}
         onSelectNav={(n) => {
           setShowDiag(false)

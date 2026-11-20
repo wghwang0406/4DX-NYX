@@ -39,6 +39,12 @@ const api: Api = {
     update: (ep, id, patch) => invoke('assets:update', ep, id, patch),
     koToEn: (ep, id, items) => invoke('assets:koToEn', ep, id, items),
     reconcileKo: (ep, ids, force) => invoke('assets:reconcileKo', ep, ids, force),
+    history: (ep, id) => invoke('assets:history', ep, id),
+    restore: (ep, id, entryId) => invoke('assets:restore', ep, id, entryId),
+    restoreImage: (ep, id, view, versionId) => invoke('assets:restoreImage', ep, id, view, versionId),
+    link: (ep, id, seq) => invoke('assets:link', ep, id, seq),
+    unlink: (ep, id, seq) => invoke('assets:unlink', ep, id, seq),
+    copy: (ep, id, seq, init) => invoke('assets:copy', ep, id, seq, init),
   },
   md: {
     pending: () => invoke('md:pending'),

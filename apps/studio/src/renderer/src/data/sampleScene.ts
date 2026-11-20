@@ -74,9 +74,9 @@ export const demoScenes: Scene[] = [
   },
 ]
 
-export const navItems = ['Sources', 'Assets', 'Shots', 'Conti', 'Images', 'Publish'] as const
+export const navItems = ['Sources', 'Assets', 'Shots', 'Conti', 'Images', 'Publish', 'Video'] as const
 
 /** 예전 이름(주소·저장값)을 새 이름으로 */
 // Conti Export 는 없어졌다 — 시트 저장은 Conti 화면의 [크게 보기]
-export const legacyNav: Record<string, (typeof navItems)[number]> = { 소스: 'Sources', 에셋: 'Assets', '샷 분해': 'Shots', 콘티: 'Conti', 레이아웃: 'Conti', 'Conti Export': 'Conti', 이미지: 'Images', 게시: 'Publish' }
+export const legacyNav: Record<string, (typeof navItems)[number]> = { 소스: 'Sources', 에셋: 'Assets', '샷 분해': 'Shots', 콘티: 'Conti', 레이아웃: 'Conti', 'Conti Export': 'Conti', 이미지: 'Images', 게시: 'Publish', 영상: 'Video' }
 export type NavItem = (typeof navItems)[number]

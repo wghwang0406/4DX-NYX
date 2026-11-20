@@ -1,5 +1,5 @@
 // 메인 ↔ 렌더러 계약. 양쪽이 이 타입만 본다.
-import type { Annotation, Asset, KoPairEn, Project, Sequence, Shot } from '@conti/domain'
+import type { Annotation, Asset, AssetHistoryEntry, KoPairEn, Project, Sequence, Shot } from '@conti/domain'
 import type { SceneChunk } from '@conti/screenplay'
 
 export interface ToolStatus {
@@ -88,6 +88,18 @@ export interface Api {
     koToEn(ep: string, id: string, items: Array<{ field: KoPairEn; ko: string; en: string }>): Promise<Array<{ field: KoPairEn; en: string; changesKo: string[] }>>
     /** 한·영 자동 맞춤 (번역 / 한글대로 영문 / 예전 칸 합치기). force = 그 칸을 영문 기준으로 다시 옮김. 영문이 바뀐 칸만 changes */
     reconcileKo(ep: string, ids: string[], force?: KoPairEn[]): Promise<{ changes: KoChange[]; translated: number }>
+    /** 수정 히스토리 (최신이 앞) */
+    history(ep: string, id: string): Promise<AssetHistoryEntry[]>
+    /** 글을 그 항목 시점으로 되돌린다 */
+    restore(ep: string, id: string, entryId: string): Promise<{ staleShots: number }>
+    /** 예전 이미지 버전을 다시 현재로 (같은 파일, 새 번호) */
+    restoreImage(ep: string, id: string, view: string, versionId: string): Promise<{ staleShots: number }>
+    /** 다른 씬의 에셋을 이 씬에서도 그대로 쓴다 */
+    link(ep: string, id: string, seq: string): Promise<void>
+    /** 이 씬에서 뺀다 (이 씬 샷이 쓰고 있으면 거부) */
+    unlink(ep: string, id: string, seq: string): Promise<void>
+    /** 복제해서 변형 — 새 태그의 에셋. replaceInSeq 면 이 씬 샷 태그도 새 에셋으로 */
+    copy(ep: string, id: string, seq: string, init: { tag: string; nameKo: string; replaceInSeq?: boolean }): Promise<{ id: string; tag: string; retagged: number }>
   }
   md: {
     pending(): Promise<PendingChangeView[]>

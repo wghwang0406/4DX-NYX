@@ -463,9 +463,9 @@ export class JobService {
     if (j.target.type === 'background') return
     const t = j.target
     const ea = await this.o.store.listAssets(t.ep)
-    const asset = ea.assets.find((a) => a.id === t.assetId)
-    if (!asset) throw new Error(`에셋이 사라졌습니다: ${t.tag} (파일은 ${version.file})`)
-    await this.o.store.upsertAsset(t.ep, { ...asset, views: { ...asset.views, [t.view]: [...(asset.views[t.view] ?? []), version] } })
+    if (!ea.assets.some((a) => a.id === t.assetId)) throw new Error(`에셋이 사라졌습니다: ${t.tag} (파일은 ${version.file})`)
+    // 같은 에셋의 뷰 작업 여러 개가 동시에 끝나도 서로의 버전을 덮지 않게 — 저장 직전 값에 붙인다
+    await this.o.store.mutateAsset(t.ep, t.assetId, (asset) => ({ ...asset, views: { ...asset.views, [t.view]: [...(asset.views[t.view] ?? []), version] } }), { by: 'gen' })
   }
 
   private async setShotStage(j: JobRecord, status: 'queued' | 'running' | 'failed') {

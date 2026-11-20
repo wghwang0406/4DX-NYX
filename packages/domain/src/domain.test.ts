@@ -86,3 +86,12 @@ describe('asset scenes (assetSeqs)', () => {
     expect(assetSeqs({ tag: '@없음', usedIn: [] }, seqs)).toEqual([]) // 씬 미지정
   })
 })
+
+describe('asset variants (nextVariant)', () => {
+  it('picks the next free letter', async () => {
+    const { nextVariant } = await import('./assetSeqs')
+    expect(nextVariant('@prop_경찰차', '경찰차', ['@prop_경찰차'])).toEqual({ tag: '@prop_경찰차_B', nameKo: '경찰차 B' })
+    expect(nextVariant('@prop_경찰차', '경찰차', ['@prop_경찰차', '@prop_경찰차_B'])).toEqual({ tag: '@prop_경찰차_C', nameKo: '경찰차 C' })
+    expect(nextVariant('@prop_경찰차_B', '경찰차 B', ['@prop_경찰차', '@prop_경찰차_B'])).toEqual({ tag: '@prop_경찰차_C', nameKo: '경찰차 C' })
+  })
+})

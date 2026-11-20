@@ -179,6 +179,70 @@ describe('ProjectStore.patchAsset (에셋 카드 직접 수정)', () => {
     expect(await readFile(join(root, 'EP01/character/Character.md'), 'utf8')).toContain('stained cloth bandage')
     await expect(store.patchAsset('EP01', 'nope', { nameKo: 'x' })).rejects.toThrow('에셋 없음')
   })
+
+  it('keeps an edit history (text + images) and restores text or an image version', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'conti-hist-'))
+    const store = await ProjectStore.create(root, { code: 'TST', title: '테스트' })
+    const ver = (id: string, n: number) => ({ id, n, stage: 'conti' as const, file: `EP01/character/char/x_v${n}.png`, source: 'generated' as const, createdAt: n })
+    await store.upsertAsset('EP01', { id: 'a1', tag: '@해수', kind: 'char', nameKo: '해수', descriptionKo: '단정한 단발', anchorEn: 'neat bob', state: 'base', views: {}, usedIn: ['S41'] }, { by: 'ai' })
+    await store.patchAsset('EP01', 'a1', { descriptionKo: '흐트러진 단발', anchorEn: 'messy bob' })
+    await store.patchAsset('EP01', 'a1', { descriptionKo: '흐트러진 단발' }) // 바뀐 게 없으면 기록 안 함
+    await store.patchAsset('EP01', 'a1', { views: { sheet: [ver('v1', 1)] } }, { by: 'gen' })
+    await store.patchAsset('EP01', 'a1', { views: { sheet: [ver('v1', 1), ver('v2', 2)] } }, { by: 'gen' })
+    let h = await store.assetHistory('EP01', 'a1')
+    expect(h.map((e) => `${e.by}:${e.action}`)).toEqual(['gen:image', 'gen:image', 'user:edit', 'ai:create'])
+    expect(h[2].changes.map((c) => c.field).sort()).toEqual(['anchorEn', 'descriptionKo'])
+    expect(h[2].changes.find((c) => c.field === 'anchorEn')).toMatchObject({ before: 'neat bob', after: 'messy bob' })
+    expect(h[0].images).toEqual([{ view: 'sheet', versionId: 'v2', n: 2, file: 'EP01/character/char/x_v2.png' }])
+
+    // 글을 처음 시점으로 — 한·영 짝은 맞춰진 것으로 기록 (다시 번역하지 않게)
+    const r = await store.restoreAsset('EP01', 'a1', h[3].id)
+    expect(r.asset).toMatchObject({ descriptionKo: '단정한 단발', anchorEn: 'neat bob', usedIn: ['S41'] })
+    expect(r.asset.koSync?.anchorEn).toEqual({ en: 'neat bob', ko: '단정한 단발' })
+    // 이미지 v1 을 다시 현재로 → 같은 파일, 새 번호
+    const ri = await store.restoreAssetImage('EP01', 'a1', 'sheet', 'v1')
+    const sheet = ri.asset.views.sheet
+    expect(sheet.at(-1)).toMatchObject({ n: 3, file: 'EP01/character/char/x_v1.png', parentId: 'v1' })
+    h = await store.assetHistory('EP01', 'a1')
+    expect(h.slice(0, 2).map((e) => `${e.by}:${e.action}`)).toEqual(['restore:restore', 'restore:restore'])
+  })
+
+  it('concurrent view writes to one asset keep every version (mutateAsset is serialized)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'conti-race-'))
+    const store = await ProjectStore.create(root, { code: 'TST', title: '테스트' })
+    await store.upsertAsset('EP01', { id: 'a1', tag: '@해수', kind: 'char', nameKo: '해수', descriptionKo: '', anchorEn: '', state: 'base', views: {}, usedIn: [] })
+    const ver = (id: string) => ({ id, n: 1, stage: 'conti' as const, file: `x_${id}.png`, source: 'generated' as const, createdAt: 1 })
+    await Promise.all(['front', 'back', 'face'].map((v) => store.mutateAsset('EP01', 'a1', (a) => ({ ...a, views: { ...a.views, [v]: [ver(v)] } }), { by: 'gen' })))
+    const a = (await store.listAssets('EP01')).assets[0]
+    expect(Object.keys(a.views).sort()).toEqual(['back', 'face', 'front'])
+    expect((await store.assetHistory('EP01', 'a1')).filter((e) => e.action === 'image')).toHaveLength(3)
+  })
+
+  it('links, unlinks and copies assets across scenes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'conti-link-'))
+    const store = await ProjectStore.create(root, { code: 'TST', title: '테스트' })
+    await store.upsertSequence({ seq: 'S01', ep: 'EP01', headingKo: '도로', shots: [{ id: 's1', no: '0010', props: ['@prop_경찰차'] }] })
+    await store.upsertSequence({ seq: 'S04', ep: 'EP01', headingKo: '도로2', shots: [{ id: 's2', no: '0010', props: ['@prop_경찰차'], characters: ['@해수'] }] })
+    await store.upsertAsset('EP01', { id: 'p1', tag: '@prop_경찰차', kind: 'prop', nameKo: '경찰차', descriptionKo: '흰 경찰차', anchorEn: 'white police car', state: 'base', views: {}, usedIn: ['S01'] })
+
+    // 그대로 쓰기
+    expect((await store.linkAsset('EP01', 'p1', 'S02')).usedIn).toEqual(['S01', 'S02'])
+    // 샷이 쓰는 씬에서는 못 뺀다 / 안 쓰는 씬은 뺀다
+    await expect(store.unlinkAsset('EP01', 'p1', 'S01')).rejects.toThrow('샷 1개')
+    expect((await store.unlinkAsset('EP01', 'p1', 'S02')).usedIn).toEqual(['S01'])
+
+    // S04 는 경찰차 B 로 — 샷 태그를 바꾸고 원래 에셋은 S04 에서 빠진다
+    await store.linkAsset('EP01', 'p1', 'S04')
+    const c = await store.copyAsset('EP01', 'p1', 'S04', { tag: '@prop_경찰차_B', nameKo: '경찰차 B', replaceInSeq: true })
+    expect(c.retagged).toBe(1)
+    expect(c.asset).toMatchObject({ tag: '@prop_경찰차_B', nameKo: '경찰차 B', anchorEn: 'white police car', usedIn: ['S04'] })
+    expect(store.getSequence('S04')!.shots[0].props).toEqual(['@prop_경찰차_B'])
+    expect(store.getSequence('S01')!.shots[0].props).toEqual(['@prop_경찰차'])
+    const assets = (await store.listAssets('EP01')).assets
+    expect(assets.find((a) => a.id === 'p1')!.usedIn).toEqual(['S01'])
+    expect((await store.assetHistory('EP01', c.asset.id))[0]).toMatchObject({ action: 'copy', note: '@prop_경찰차 에서 복제' })
+    await expect(store.copyAsset('EP01', 'p1', 'S04', { tag: '@prop_경찰차_B', nameKo: 'x' })).rejects.toThrow('이미 있는 태그')
+  })
 })
 
 describe('MdWatcher', () => {

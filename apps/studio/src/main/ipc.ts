@@ -412,6 +412,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
   ipcMain.handle('agent:availability', () => requireHost().availability())
   ipcMain.handle('assets:koToEn', (_e, ep: string, id: string, items: KoToEnItem[]) => requireHost().koToEn(ep, id, items))
   ipcMain.handle('assets:reconcileKo', (_e, ep: string, ids: string[], force?: KoPairEn[]) => requireHost().reconcileKo(ep, ids, force))
+  ipcMain.handle('assets:history', (_e, ep: string, id: string) => requireStore().assetHistory(ep, id))
+  ipcMain.handle('assets:restore', async (_e, ep: string, id: string, entryId: string) => ({ staleShots: (await requireStore().restoreAsset(ep, id, entryId)).staleShots }))
+  ipcMain.handle('assets:restoreImage', async (_e, ep: string, id: string, view: string, versionId: string) => ({
+    staleShots: (await requireStore().restoreAssetImage(ep, id, view, versionId)).staleShots,
+  }))
+  ipcMain.handle('assets:link', async (_e, ep: string, id: string, seq: string) => void (await requireStore().linkAsset(ep, id, seq)))
+  ipcMain.handle('assets:unlink', async (_e, ep: string, id: string, seq: string) => void (await requireStore().unlinkAsset(ep, id, seq)))
+  ipcMain.handle('assets:copy', async (_e, ep: string, id: string, seq: string, init: { tag: string; nameKo: string; replaceInSeq?: boolean }) => {
+    const r = await requireStore().copyAsset(ep, id, seq, init)
+    return { id: r.asset.id, tag: r.asset.tag, retagged: r.retagged }
+  })
   ipcMain.handle('agent:threads', () => requireHost().listThreads())
   ipcMain.handle('agent:history', (_e, id: string) => requireHost().history(id))
   ipcMain.handle('agent:open', (_e, opts) => requireHost().open(opts))

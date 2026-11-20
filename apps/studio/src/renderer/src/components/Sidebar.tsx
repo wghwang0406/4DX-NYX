@@ -1,4 +1,5 @@
-import { ChevronsLeft, ChevronsRight, Folder, FileText, Film, Box, ListTree, LayoutGrid, Image, Send, Settings } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronsLeft, ChevronsRight, ChevronDown, ChevronRight, Folder, FileText, Film, Box, ListTree, LayoutGrid, Image, Send, Settings, Clapperboard } from 'lucide-react'
 import type { Scene, NavItem } from '../data/sampleScene'
 import { navItems } from '../data/sampleScene'
 import ProjectSwitcher from './ProjectSwitcher'
@@ -10,6 +11,7 @@ const navIcons: Record<NavItem, typeof Film> = {
   Conti: LayoutGrid,
   Images: Image,
   Publish: Send,
+  Video: Clapperboard,
 }
 
 interface Props {
@@ -19,6 +21,9 @@ interface Props {
   scenes: Scene[]
   activeSeq: string
   onSelectScene: (seq: string) => void
+  /** 씬 › 어셋 (N) */
+  assetCounts?: Record<string, number>
+  onOpenAssets?: (seq: string) => void
   nav: NavItem
   onSelectNav: (n: NavItem) => void
   onDiagnostics: () => void
@@ -27,9 +32,16 @@ interface Props {
   demo?: boolean
 }
 
-export default function Sidebar({ open, onToggle, projectTitle, scenes, activeSeq, onSelectScene, nav, onSelectNav, onDiagnostics, diagActive, demo }: Props) {
+export default function Sidebar({ open, onToggle, projectTitle, scenes, activeSeq, onSelectScene, assetCounts, onOpenAssets, nav, onSelectNav, onDiagnostics, diagActive, demo }: Props) {
   // 에피소드별로 묶는다
   const eps = [...new Set(scenes.map((s) => s.ep))].sort()
+  // 펼친 씬 — 현재 씬은 자동으로 펼친다 (씬이 많아도 길어지지 않게 나머지는 접힌 채)
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(activeSeq ? [activeSeq] : []))
+  useEffect(() => {
+    if (activeSeq) setExpanded((s) => (s.has(activeSeq) ? s : new Set([...s, activeSeq])))
+  }, [activeSeq])
+  const toggle = (seq: string) => setExpanded((s) => (s.has(seq) ? new Set([...s].filter((x) => x !== seq)) : new Set([...s, seq])))
+  const withAssets = !!assetCounts && !!onOpenAssets
 
   return (
     <aside
@@ -60,15 +72,29 @@ export default function Sidebar({ open, onToggle, projectTitle, scenes, activeSe
               {scenes
                 .filter((s) => s.ep === ep)
                 .map((s) => (
-                  <TreeRow
-                    key={s.seq}
-                    icon={FileText}
-                    label={`${s.seq}  ${s.title}`}
-                    open={open}
-                    depth={2}
-                    active={s.seq === activeSeq && !diagActive}
-                    onClick={() => onSelectScene(s.seq)}
-                  />
+                  <div key={s.seq}>
+                    <TreeRow
+                      icon={FileText}
+                      label={`${s.seq}  ${s.title}`}
+                      open={open}
+                      depth={2}
+                      active={s.seq === activeSeq && !diagActive && !(withAssets && nav === 'Assets')}
+                      onClick={() => onSelectScene(s.seq)}
+                      caret={withAssets ? (expanded.has(s.seq) ? 'open' : 'closed') : undefined}
+                      onCaret={() => toggle(s.seq)}
+                    />
+                    {withAssets && open && expanded.has(s.seq) && (
+                      <TreeRow
+                        icon={Box}
+                        label={`어셋 (${assetCounts![s.seq] ?? 0})`}
+                        open={open}
+                        depth={3}
+                        testId={`tree-assets-${s.seq}`}
+                        active={s.seq === activeSeq && nav === 'Assets' && !diagActive}
+                        onClick={() => onOpenAssets!(s.seq)}
+                      />
+                    )}
+                  </div>
                 ))}
             </div>
           ))}
@@ -120,6 +146,9 @@ function TreeRow({
   depth,
   active,
   onClick,
+  caret,
+  onCaret,
+  testId,
 }: {
   icon: typeof Folder
   label: string
@@ -127,16 +156,35 @@ function TreeRow({
   depth: number
   active?: boolean
   onClick?: () => void
+  /** 하위 항목 펼침 표시 (▸/▾) — 누르면 onCaret */
+  caret?: 'open' | 'closed'
+  onCaret?: () => void
+  testId?: string
 }) {
+  const Caret = caret === 'open' ? ChevronDown : ChevronRight
   return (
     <button
       onClick={onClick}
+      data-testid={testId}
       title={label}
       className={`mb-0.5 flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left ${
         active ? 'bg-accent-soft text-ink' : 'text-muted hover:bg-panel-2 hover:text-ink'
       } ${open ? '' : 'justify-center'}`}
       style={open ? { paddingLeft: 8 + depth * 12 } : undefined}
     >
+      {open && caret && (
+        <span
+          role="button"
+          aria-label={caret === 'open' ? '접기' : '펼치기'}
+          onClick={(e) => {
+            e.stopPropagation()
+            onCaret?.()
+          }}
+          className="-ml-1 shrink-0 rounded text-muted hover:text-ink"
+        >
+          <Caret size={12} />
+        </span>
+      )}
       <Icon size={14} className="shrink-0" />
       {open && <span className="truncate text-[12.5px]">{label}</span>}
     </button>

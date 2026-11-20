@@ -265,7 +265,8 @@ function createWindow(): BrowserWindow {
       }, 2500)
     })
   } else if (process.env.CONTI_E2E_ASSET_SEQS) {
-    // 에셋 씬별 탭: 각 씬 탭의 카드 태그 / [전체] / 헤더 씬과 탭이 같이 움직이는지 / 겹치는 에셋 칩. 결과는 CONTI_E2E_OUT
+    // 에셋 씬별 탭: 각 씬 탭의 카드 태그 / 헤더 씬과 탭이 같이 움직이는지 / 겹치는 에셋 칩
+    // + 왼쪽 목록 씬 › 어셋 / 다른 씬에서 가져오기(그대로 쓰기) / 복제해서 변형 / 히스토리·되돌리기 / 이 씬에서 빼기 / VIDEO 탭. 결과는 CONTI_E2E_OUT
     win.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
         const out = process.env.CONTI_E2E_OUT ?? '/tmp/conti-asset-seqs.json'
@@ -289,6 +290,78 @@ function createWindow(): BrowserWindow {
             ;(r.bySeq as Record<string, unknown>)[t] = { tags: await tags(), pressed: await pressed(), header: await header(), shared: await js(`[...document.querySelectorAll('[data-shared]')].map(e => e.dataset.shared + '=' + e.textContent)`) }
             if (shots) await writeFile(join(shots, `seq-${t}.png`), (await win.webContents.capturePage()).toPNG())
           }
+          const snap = async (name: string) => shots && writeFile(join(shots, `${name}.png`), (await win.webContents.capturePage()).toPNG())
+          const until = async (cond: string, ms: number) => {
+            for (let t = 0; t < ms; t += 200) {
+              if (await js(cond)) return true
+              await wait(200)
+            }
+            return false
+          }
+          const notice = () => js(`document.querySelector('[data-testid=assets-notice]')?.textContent ?? null`)
+          // 왼쪽 목록: S01 › 어셋 (N) → Assets S01
+          r.sidebar = { s01: await js(`document.querySelector('[data-testid=tree-assets-S01]')?.textContent ?? null`) }
+          await js(`document.querySelector('[data-testid=tree-assets-S01]')?.click()`)
+          await wait(400)
+          ;(r.sidebar as Record<string, unknown>).afterClick = { pressed: await pressed(), count: (await tags()).length }
+          // S41 에서 다른 씬 에셋 가져오기 → @loc_바닷속_night 그대로 쓰기
+          await js(`document.querySelector('[data-seq-tab="S41"]').click()`)
+          await wait(400)
+          const before41 = (await tags()).length
+          await js(`document.querySelector('[data-testid=assets-import]').click()`)
+          await until(`!!document.querySelector('[data-testid=asset-import]')`, 3000)
+          r.importList = await js(`[...document.querySelectorAll('[data-import]')].map(e => e.dataset.import)`)
+          await snap('lib-import')
+          await js(`document.querySelector('[data-import="@loc_바닷속_night"] [data-testid=import-link]').click()`)
+          await until(`!document.querySelector('[data-testid=asset-import]')`, 3000)
+          await wait(500)
+          r.afterLink = { before: before41, after: (await tags()).length, has: (await tags()).includes('@loc_바닷속_night'), notice: await notice() }
+          // @prop_경찰차 복제해서 변형 → @prop_경찰차_B, S41 샷 태그도 바뀜
+          await js(`document.querySelector('[data-asset="@prop_경찰차"] [data-testid=card-copy]').click()`)
+          await until(`!!document.querySelector('[data-testid=copy-tag]')`, 2000)
+          r.copyDefault = await js(`[document.querySelector('[data-testid=copy-tag]').value, document.querySelector('[data-testid=copy-name]').value]`)
+          await snap('lib-copy-form')
+          await js(`document.querySelector('[data-testid=copy-submit]').click()`)
+          await until(`[...document.querySelectorAll('[data-asset]')].some(e => e.dataset.asset === '@prop_경찰차_B')`, 4000)
+          await wait(400)
+          const { readFile } = await import('node:fs/promises')
+          const root = ipcHandle!.currentRoot()!
+          const s41 = JSON.parse(await readFile(join(root, '.conti/episodes/EP01/sequences/S41.json'), 'utf8')) as { shots: Array<{ props: string[] }> }
+          r.afterCopy = {
+            tags41: await tags(),
+            notice: await notice(),
+            shotsB: s41.shots.filter((x) => x.props.includes('@prop_경찰차_B')).length,
+            shotsA: s41.shots.filter((x) => x.props.includes('@prop_경찰차')).length,
+            unassignedTab: await js(`document.querySelector('[data-seq-tab=unassigned]')?.textContent ?? null`),
+          }
+          // 이름 고치기 → 히스토리에 남음 → [이 시점으로] 되돌리기
+          await js(`document.querySelector('[data-asset="@prop_경찰차_B"] button').click()`)
+          await until(`!!document.querySelector('[data-asset="@prop_경찰차_B"] [data-testid=name-text]')`, 3000)
+          await js(`document.querySelector('[data-asset="@prop_경찰차_B"] [data-testid=name-text]').click()`)
+          await until(`!!document.querySelector('[data-testid=inline-nameKo]')`, 3000)
+          await js(`(() => { const el = document.querySelector('[data-testid=inline-nameKo]'); Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value').set.call(el, '경찰차 B (전복)'); el.dispatchEvent(new Event('input', { bubbles: true })); el.blur(); return true })()`)
+          await until(`(document.querySelector('[data-asset="@prop_경찰차_B"] [data-testid=name-text]')?.textContent ?? '') === '경찰차 B (전복)'`, 4000)
+          await js(`document.querySelector('[data-asset="@prop_경찰차_B"] [data-testid=card-history]').click()`)
+          await until(`document.querySelectorAll('[data-asset="@prop_경찰차_B"] [data-history]').length >= 2`, 4000)
+          r.history = await js(`[...document.querySelectorAll('[data-asset="@prop_경찰차_B"] [data-history]')].map(e => e.dataset.history + ': ' + e.textContent.slice(0, 80))`)
+          await snap('lib-history')
+          await js(`document.querySelector('[data-asset="@prop_경찰차_B"] [data-history=copy] [data-testid=history-restore]').click()`)
+          await until(`(document.querySelector('[data-asset="@prop_경찰차_B"] [data-testid=name-text]')?.textContent ?? '') === '경찰차 B'`, 4000)
+          await wait(400)
+          r.afterRestore = {
+            name: await js(`document.querySelector('[data-asset="@prop_경찰차_B"] [data-testid=name-text]')?.textContent ?? null`),
+            history: await js(`[...document.querySelectorAll('[data-asset="@prop_경찰차_B"] [data-history]')].map(e => e.dataset.history)`),
+          }
+          // 이 씬에서 빼기: 샷이 쓰는 원래 경찰차는 비활성 / 방금 연결한 바닷속은 뺄 수 있음
+          r.unlinkDisabled = await js(`document.querySelector('[data-asset="@prop_트럭"] [data-testid=card-unlink]')?.disabled ?? null`)
+          await js(`document.querySelector('[data-asset="@loc_바닷속_night"] [data-testid=card-unlink]').click()`)
+          await wait(600)
+          r.afterUnlink = { has: (await tags()).includes('@loc_바닷속_night'), notice: await notice() }
+          // VIDEO 탭
+          await js(`[...document.querySelectorAll('nav button')].find(b => b.title === 'Video')?.click()`)
+          await until(`!!document.querySelector('[data-testid=video-view]')`, 3000)
+          r.video = { rows: await js(`document.querySelectorAll('[data-video-shot]').length`), nav: await js(`[...document.querySelectorAll('nav button')].map(b => b.title)`) }
+          await snap('lib-video')
         } catch (e) {
           r.error = String(e)
         }

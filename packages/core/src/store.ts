@@ -1,7 +1,21 @@
-import { mkdir, readdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { Project, Sequence, EpisodeAssets, Asset, PROJECT_DIRS, type Shot } from '@conti/domain'
+import {
+  Project,
+  Sequence,
+  EpisodeAssets,
+  Asset,
+  KO_PAIRS,
+  PROJECT_DIRS,
+  diffAsset,
+  assetSnapshot,
+  shotUsesTag,
+  withKoSync,
+  type AssetHistoryEntry,
+  type AssetWriteMeta,
+  type Shot,
+} from '@conti/domain'
 import { absPath, exists, readText, sha256, writeAtomic } from './fs'
 import { parseConfigMd, renderConfigMd } from './md/config'
 import { renderShotlistMd } from './md/shotlist'
@@ -161,37 +175,204 @@ export class ProjectStore {
     return ea
   }
 
-  /** id 가 같으면 교체, 없으면 추가. Character.md 뷰도 다시 쓴다. */
-  async upsertAsset(ep: string, asset: Asset): Promise<EpisodeAssets> {
-    const prev = await this.listAssets(ep)
-    const idx = prev.assets.findIndex((a) => a.id === asset.id)
-    const assets = idx === -1 ? [...prev.assets, asset] : prev.assets.map((a, i) => (i === idx ? asset : a))
-    const next = EpisodeAssets.parse({ ...prev, ep, assets, rev: prev.rev + 1 })
-    this.assets.set(ep, next)
-    await writeAtomic(this.assetsPath(ep), JSON.stringify(next, null, 2) + '\n')
-    await this.writeView(`${PROJECT_DIRS.character(ep)}/Character.md`, renderCharacterMd(next))
-    this.emit({ type: 'assets', ep, assets: next })
-    return next
+  /**
+   * id 가 같으면 교체, 없으면 추가. Character.md 뷰도 다시 쓴다.
+   * 글·이미지가 실제로 바뀌었으면 수정 히스토리에 한 줄 남긴다 (meta.by = 누가: 사람·AI·자동 맞춤·생성·되돌리기).
+   */
+  async upsertAsset(ep: string, asset: Asset, meta: AssetWriteMeta = {}): Promise<EpisodeAssets> {
+    return this.assetLock(ep, () => this.writeAsset(ep, asset, meta))
+  }
+
+  /**
+   * 지금 값을 읽어 고친 뒤 저장 — 읽기·쓰기 사이에 다른 쓰기가 끼지 않는다 (같은 에셋의 뷰 생성 작업 여러 개가 동시에 끝나도 버전이 사라지지 않게).
+   */
+  async mutateAsset(ep: string, id: string, fn: (cur: Asset) => Asset, meta: AssetWriteMeta = {}): Promise<{ prev: Asset; asset: Asset; rev: number }> {
+    return this.assetLock(ep, async () => {
+      const prev = (await this.listAssets(ep)).assets.find((a) => a.id === id)
+      if (!prev) throw new Error(`에셋 없음: ${id}`)
+      const asset = Asset.parse({ ...fn(prev), id: prev.id })
+      const next = await this.writeAsset(ep, asset, meta)
+      return { prev, asset, rev: next.rev }
+    })
   }
 
   /**
    * 기존 에셋에 준 필드만 덮어쓴다 (UI 카드 수정 · MCP assets_upsert 공용).
    * 외형 필드가 실제로 바뀌면 그 에셋이 나오는 콘티 컷을 재생성 필요(stale)로 표시한다.
    */
-  async patchAsset(ep: string, id: string, patch: Partial<Omit<Asset, 'id'>>): Promise<{ asset: Asset; staleShots: number; rev: number }> {
-    const prev = (await this.listAssets(ep)).assets.find((a) => a.id === id)
-    if (!prev) throw new Error(`에셋 없음: ${id}`)
+  async patchAsset(ep: string, id: string, patch: Partial<Omit<Asset, 'id'>>, meta: AssetWriteMeta = {}): Promise<{ asset: Asset; staleShots: number; rev: number }> {
     const given = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<Asset>
-    const asset = Asset.parse({ ...prev, ...given, id: prev.id })
-    const next = await this.upsertAsset(ep, asset)
+    const { prev, asset, rev } = await this.mutateAsset(ep, id, (cur) => ({ ...cur, ...given }), meta)
     const changed = VISUAL_ASSET_KEYS.some(
       (k) => k in given && JSON.stringify(given[k]) !== JSON.stringify(prev[k]) && (k !== 'descriptionKo' || !asset.anchorEn.trim()),
     )
     const staleShots = changed ? await this.markStaleByAsset(asset.tag) : 0
-    return { asset, staleShots, rev: next.rev }
+    return { asset, staleShots, rev }
+  }
+
+  // ── 에셋 수정 히스토리 · 씬 연결 · 복제 ──────────────────────────────────
+
+  /** 한 에셋의 히스토리 (최신이 앞) */
+  async assetHistory(ep: string, assetId: string): Promise<AssetHistoryEntry[]> {
+    const p = this.historyPath(ep)
+    if (!(await exists(p))) return []
+    const out: AssetHistoryEntry[] = []
+    for (const line of (await readText(p)).split('\n')) {
+      if (!line.trim()) continue
+      try {
+        const e = JSON.parse(line) as AssetHistoryEntry
+        if (e.assetId === assetId) out.push(e)
+      } catch {
+        /* 깨진 줄은 건너뛴다 */
+      }
+    }
+    return out.reverse()
+  }
+
+  /**
+   * 글을 그 히스토리 항목 시점으로 되돌린다 (그 항목의 snapshot 을 덮어씀). 씬 연결(usedIn)은 그대로 둔다.
+   * 한·영 짝이 둘 다 있으면 서로 맞춰진 것으로 기록해 다시 번역하지 않는다.
+   */
+  async restoreAsset(ep: string, id: string, entryId: string): Promise<{ asset: Asset; staleShots: number }> {
+    const entry = (await this.assetHistory(ep, id)).find((e) => e.id === entryId)
+    if (!entry) throw new Error('히스토리 항목이 없습니다')
+    const cur = await this.requireAsset(ep, id)
+    const patch: Record<string, unknown> = {}
+    for (const [f, v] of Object.entries(entry.snapshot)) {
+      if (f === 'usedIn') continue
+      if (v == null) {
+        if (f !== 'subkind' && cur[f as keyof Asset] != null) patch[f] = ''
+      } else patch[f] = v
+    }
+    let koSync = cur.koSync
+    for (const p of KO_PAIRS) {
+      const en = (patch[p.en] ?? cur[p.en] ?? '') as string
+      const ko = (patch[p.ko] ?? cur[p.ko] ?? '') as string
+      if (en.trim() && ko.trim()) koSync = withKoSync({ koSync }, p.en, { en, ko })
+    }
+    const when = new Date(entry.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const r = await this.patchAsset(ep, id, { ...patch, koSync } as Partial<Asset>, { by: 'restore', action: 'restore', note: `${when} 시점으로` })
+    return { asset: r.asset, staleShots: r.staleShots }
+  }
+
+  /** 예전 이미지 버전을 다시 현재로 — 같은 파일을 새 번호로 추가한다 (최신 번호 = 현재, 크레딧 0) */
+  async restoreAssetImage(ep: string, id: string, view: string, versionId: string): Promise<{ asset: Asset; staleShots: number }> {
+    const cur = await this.requireAsset(ep, id)
+    const vers = cur.views[view] ?? []
+    const v = vers.find((x) => x.id === versionId)
+    if (!v) throw new Error('이미지 버전이 없습니다')
+    const n = Math.max(...vers.map((x) => x.n)) + 1
+    const copy = { ...v, id: randomUUID(), n, parentId: v.id, createdAt: Date.now() }
+    const r = await this.patchAsset(ep, id, { views: { ...cur.views, [view]: [...vers, copy] } }, { by: 'restore', action: 'restore', note: `${view} v${v.n} 을 다시 현재로` })
+    return { asset: r.asset, staleShots: r.staleShots }
+  }
+
+  /** 다른 씬의 에셋을 이 씬에서도 그대로 쓴다 (같은 에셋 — 고치면 양쪽에 반영) */
+  async linkAsset(ep: string, id: string, seq: string): Promise<Asset> {
+    const cur = await this.requireAsset(ep, id)
+    if (cur.usedIn.includes(seq)) return cur
+    return (await this.patchAsset(ep, id, { usedIn: [...cur.usedIn, seq].sort() }, { action: 'link', note: `${seq} 에서도 쓰기` })).asset
+  }
+
+  /** 이 씬에서 뺀다. 이 씬 샷이 태그로 쓰고 있으면 거부 */
+  async unlinkAsset(ep: string, id: string, seq: string): Promise<Asset> {
+    const cur = await this.requireAsset(ep, id)
+    const using = (this.sequences.get(seq)?.shots ?? []).filter((sh) => shotUsesTag(sh, cur.tag)).length
+    if (using) throw new Error(`${seq} 샷 ${using}개가 ${cur.tag} 를 쓰고 있어 뺄 수 없습니다`)
+    return (await this.patchAsset(ep, id, { usedIn: cur.usedIn.filter((s) => s !== seq) }, { action: 'unlink', note: `${seq} 에서 빼기` })).asset
+  }
+
+  /**
+   * 복제해서 변형 — 글·이미지 버전을 그대로 가진 새 에셋(새 태그)을 이 씬용으로 만든다.
+   * replaceInSeq 면 이 씬 샷의 원래 태그를 새 태그로 바꾸고 원래 에셋을 이 씬에서 뺀다 (이 씬의 경찰차는 B 로).
+   */
+  async copyAsset(ep: string, id: string, seq: string, init: { tag: string; nameKo: string; replaceInSeq?: boolean }): Promise<{ asset: Asset; retagged: number }> {
+    const src = await this.requireAsset(ep, id)
+    const tag = init.tag.trim().normalize('NFC')
+    if (!/^@\S+$/.test(tag)) throw new Error('태그는 @로 시작하고 띄어쓰기가 없어야 합니다')
+    if ((await this.listAssets(ep)).assets.some((a) => a.tag === tag)) throw new Error(`이미 있는 태그입니다: ${tag}`)
+    const asset = Asset.parse({ ...src, id: randomUUID(), tag, nameKo: init.nameKo.trim() || src.nameKo, usedIn: [seq] })
+    await this.upsertAsset(ep, asset, { action: 'copy', note: `${src.tag} 에서 복제` })
+    let retagged = 0
+    if (init.replaceInSeq) {
+      retagged = await this.retagShots(seq, src.tag, tag)
+      if (src.usedIn.includes(seq)) await this.patchAsset(ep, src.id, { usedIn: src.usedIn.filter((s) => s !== seq) }, { action: 'unlink', note: `${seq} 은 ${tag} 로` })
+    }
+    return { asset, retagged }
+  }
+
+  /** 이 씬 샷의 태그를 바꾼다 (인물·장소·소품). 바꾼 샷 수 */
+  async retagShots(seq: string, from: string, to: string): Promise<number> {
+    const s = this.sequences.get(seq)
+    if (!s) return 0
+    let n = 0
+    const shots = s.shots.map((sh) => {
+      if (!shotUsesTag(sh, from)) return sh
+      n++
+      const swap = (xs: string[]) => xs.map((x) => (x === from ? to : x))
+      return { ...sh, characters: swap(sh.characters), props: swap(sh.props), location: sh.location === from ? to : sh.location }
+    })
+    if (n) await this.upsertSequence({ ...s, shots })
+    return n
   }
 
   // ── 내부 ────────────────────────────────────────────────────────────────
+
+  private assetLocks = new Map<string, Promise<unknown>>()
+
+  /** 에피소드 에셋 쓰기를 한 줄로 세운다 */
+  private assetLock<T>(ep: string, fn: () => Promise<T>): Promise<T> {
+    const run = (this.assetLocks.get(ep) ?? Promise.resolve()).then(fn, fn)
+    this.assetLocks.set(
+      ep,
+      run.catch(() => undefined),
+    )
+    return run
+  }
+
+  private async writeAsset(ep: string, asset: Asset, meta: AssetWriteMeta): Promise<EpisodeAssets> {
+    const prev = await this.listAssets(ep)
+    const idx = prev.assets.findIndex((a) => a.id === asset.id)
+    const assets = idx === -1 ? [...prev.assets, asset] : prev.assets.map((a, i) => (i === idx ? asset : a))
+    const next = EpisodeAssets.parse({ ...prev, ep, assets, rev: prev.rev + 1 })
+    this.assets.set(ep, next)
+    await this.logAssetChange(ep, idx === -1 ? undefined : prev.assets[idx], asset, meta)
+    await writeAtomic(this.assetsPath(ep), JSON.stringify(next, null, 2) + '\n')
+    await this.writeView(`${PROJECT_DIRS.character(ep)}/Character.md`, renderCharacterMd(next))
+    this.emit({ type: 'assets', ep, assets: next })
+    return next
+  }
+
+  private async requireAsset(ep: string, id: string): Promise<Asset> {
+    const a = (await this.listAssets(ep)).assets.find((x) => x.id === id)
+    if (!a) throw new Error(`에셋 없음: ${id}`)
+    return a
+  }
+
+  private historyPath(ep: string): string {
+    return join(this.root, PROJECT_DIRS.state, 'episodes', ep, 'asset-history.ndjson')
+  }
+
+  private async logAssetChange(ep: string, prev: Asset | undefined, next: Asset, meta: AssetWriteMeta) {
+    const { changes, images } = diffAsset(prev, next)
+    if (prev && !changes.length && !images.length) return
+    const action = meta.action ?? (!prev ? 'create' : !changes.length ? 'image' : 'edit')
+    const entry: AssetHistoryEntry = {
+      id: randomUUID(),
+      at: Date.now(),
+      assetId: next.id,
+      tag: next.tag,
+      by: meta.by ?? 'user',
+      action,
+      ...(meta.note ? { note: meta.note } : {}),
+      changes,
+      images,
+      snapshot: assetSnapshot(next),
+    }
+    const p = this.historyPath(ep)
+    await mkdir(dirname(p), { recursive: true })
+    await appendFile(p, JSON.stringify(entry) + '\n', 'utf8')
+  }
 
   private assets = new Map<string, EpisodeAssets>()
 

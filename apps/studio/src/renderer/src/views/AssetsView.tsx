@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Box, User, MapPin, Package, Play, Images, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react'
-import { ASSET_VIEWS, KO_PAIRS, assetSeqs, koState, type Asset, type KoPairEn } from '@conti/domain'
+import { Box, User, MapPin, Package, Play, Images, ChevronDown, ChevronRight, ChevronsUpDown, Download, History, Copy, Unlink } from 'lucide-react'
+import { ASSET_VIEWS, KO_PAIRS, assetSeqs, koState, shotUsesTag, type Asset, type KoPairEn } from '@conti/domain'
 import { useProject } from '../state/project'
 import { fileUrl } from '../data/adapters'
 import AssetViewer from '../components/AssetViewer'
 import AssetKoView from '../components/AssetKoView'
+import AssetHistory from '../components/AssetHistory'
+import AssetImport, { AssetCopyForm } from '../components/AssetImport'
 import type { KoChange } from '../../../shared/ipc'
 
 const KIND_LABEL = { char: '등장체', loc: '배경', prop: '소품' } as const
@@ -14,14 +16,20 @@ const VIEW_LABEL: Record<string, string> = { sheet: '시트', front: '정면', b
 /**
  * 에셋 사전 — AI(conti-setup)가 추출한 등장체/배경/소품 + 시트·뷰 이미지. 생성은 승인 카드를 거친다.
  * 에셋은 에피소드 단위로 저장되고, 화면은 씬별 탭으로 나눠 보여 준다 (나오는 씬 = usedIn ∪ 샷 태그, assetSeqs).
- * 씬 탭은 헤더의 현재 씬과 같이 움직이고, [전체]는 에피소드 전체.
+ * 씬 탭은 헤더의 현재 씬과 같이 움직인다. 다른 씬 에셋은 [다른 씬에서 가져오기]로 그대로 쓰거나(연결) 복제해서 변형한다.
  */
 export default function AssetsView() {
   const { sequences, seq, setSeq } = useProject()
   const ep = sequences.find((s) => s.seq === seq)?.ep ?? sequences[0]?.ep ?? 'EP01'
   const epSeqs = sequences.filter((s) => s.ep === ep)
-  const [all, setAll] = useState(false)
   const [allAssets, setAssets] = useState<Asset[]>([])
+  const [importing, setImporting] = useState(false)
+  // 어느 씬에도 안 걸린 에셋 (예전 에셋·씬에서 다 뺀 것) — 있을 때만 [씬 미지정] 탭
+  const [unassignedTab, setUnassignedTab] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  // 카드별 열린 패널 — 히스토리 / 복제해서 변형
+  const [panel, setPanel] = useState<Record<string, 'history' | 'copy' | undefined>>({})
+  const togglePanel = (id: string, p: 'history' | 'copy') => setPanel((x) => ({ ...x, [id]: x[id] === p ? undefined : p }))
   const [running, setRunning] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   // 크게 보기 (썸네일 클릭) — 다시 생성은 뷰어 안의 버튼으로만
@@ -96,14 +104,25 @@ export default function AssetsView() {
     void reconcile(need.map((a) => a.id))
   }, [allAssets]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 씬별 보기 — 나오는 씬이 없는 에셋(손으로 만든 것 등)은 잃어버리지 않게 모든 씬 탭에 "씬 미지정"으로 보인다
+  // 씬별 보기 — 나오는 씬이 없는 에셋은 [씬 미지정] 탭에 모인다 (거기서 다른 씬으로 가져다 쓸 수 있다)
   const seqsOf = new Map(allAssets.map((a) => [a.id, assetSeqs(a, epSeqs)]))
-  const inSeq = (a: Asset, s: string) => {
-    const xs = seqsOf.get(a.id) ?? []
-    return !xs.length || xs.includes(s)
+  const inSeq = (a: Asset, s: string) => (seqsOf.get(a.id) ?? []).includes(s)
+  const unassigned = allAssets.filter((a) => !(seqsOf.get(a.id) ?? []).length)
+  const showUnassigned = unassignedTab && unassigned.length > 0
+  const scoped = !showUnassigned && seq && epSeqs.some((s) => s.seq === seq) ? seq : null
+  const assets = showUnassigned ? unassigned : scoped ? allAssets.filter((a) => inSeq(a, scoped)) : allAssets
+  const seqShots = epSeqs.find((s) => s.seq === scoped)?.shots ?? []
+  const usingHere = (a: Asset) => seqShots.filter((sh) => shotUsesTag(sh, a.tag)).length
+  async function unlink(a: Asset) {
+    if (!scoped) return
+    setErr(null)
+    try {
+      await window.conti.api.assets.unlink(ep, a.id, scoped)
+      setNotice(`${a.tag} 를 ${scoped} 에서 뺐습니다 (에셋은 ${(seqsOf.get(a.id) ?? []).filter((x) => x !== scoped).join('·') || '씬 미지정'} 에 남아 있습니다)`)
+    } catch (e) {
+      setErr((e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, ''))
+    }
   }
-  const scoped = all || !seq ? null : seq
-  const assets = scoped ? allAssets.filter((a) => inSeq(a, scoped)) : allAssets
   const allOpen = assets.length > 0 && assets.every((a) => open.has(a.id))
 
   async function runSetup() {
@@ -137,11 +156,20 @@ export default function AssetsView() {
         <div>
           <div className="text-[14px] font-semibold">
             에셋 — {ep}
-            {scoped ? ` · ${scoped}` : ' · 전체'}
+            {scoped ? ` · ${scoped}` : ''}
           </div>
           <div className="text-[12px] text-muted">시나리오에서 등장체·배경·소품을 뽑아 사전을 만들고, 승인하면 시트·뷰 이미지를 생성합니다. 콘티는 이 시트를 레퍼런스로 그립니다.</div>
         </div>
         <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+          <button
+            data-testid="assets-import"
+            disabled={!scoped}
+            onClick={() => setImporting(true)}
+            className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[12.5px] hover:bg-panel-2 disabled:opacity-50"
+            title="다른 씬의 에셋을 이 씬에서 그대로 쓰거나 복제해서 변형"
+          >
+            <Download size={14} /> 다른 씬에서 가져오기
+          </button>
           <button
             data-testid="assets-expand-all"
             disabled={!assets.length}
@@ -166,14 +194,14 @@ export default function AssetsView() {
       {epSeqs.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5" data-testid="asset-seq-tabs">
           {epSeqs.map((s) => {
-            const on = scoped === s.seq
+            const on = !showUnassigned && scoped === s.seq
             return (
               <button
                 key={s.seq}
                 data-seq-tab={s.seq}
                 aria-pressed={on}
                 onClick={() => {
-                  setAll(false)
+                  setUnassignedTab(false)
                   setSeq(s.seq)
                 }}
                 title={s.headingKo}
@@ -183,13 +211,24 @@ export default function AssetsView() {
               </button>
             )
           })}
-          <button
-            data-seq-tab="all"
-            aria-pressed={!scoped}
-            onClick={() => setAll(true)}
-            className={`rounded-md border px-2.5 py-1 text-[12px] ${!scoped ? 'border-accent bg-accent/15 text-ink' : 'border-line text-muted hover:text-ink'}`}
-          >
-            전체 <span className="text-[10.5px] opacity-70">{allAssets.length}</span>
+          {unassigned.length > 0 && (
+            <button
+              data-seq-tab="unassigned"
+              aria-pressed={showUnassigned}
+              onClick={() => setUnassignedTab(true)}
+              title="어느 씬에도 연결되지 않은 에셋 — 씬 탭에서 [다른 씬에서 가져오기]로 다시 쓸 수 있다"
+              className={`rounded-md border border-dashed px-2.5 py-1 text-[12px] ${showUnassigned ? 'border-accent bg-accent/15 text-ink' : 'border-line text-muted hover:text-ink'}`}
+            >
+              씬 미지정 <span className="text-[10.5px] opacity-70">{unassigned.length}</span>
+            </button>
+          )}
+        </div>
+      )}
+      {notice && (
+        <div data-testid="assets-notice" className="flex items-center justify-between rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-[12px]">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} className="text-muted hover:text-ink">
+            닫기
           </button>
         </div>
       )}
@@ -226,11 +265,7 @@ export default function AssetsView() {
                               {seqsOf.get(a.id)!.join('·')}
                             </span>
                           )}
-                          {!seqsOf.get(a.id)?.length && (
-                            <span className="rounded border border-dashed border-line px-1" title="어느 씬에 나오는지 기록이 없어 모든 씬에 보입니다">
-                              씬 미지정
-                            </span>
-                          )}
+                
                         </span>
                       </div>
                       {!expanded && <div className="mt-0.5 text-[12.5px]">{a.nameKo}</div>}
@@ -269,14 +304,63 @@ export default function AssetsView() {
                         )
                       })}
                     </div>
-                    <div className="mt-1.5 flex items-center justify-between gap-2">
-                      <span />
+                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 whitespace-nowrap">
+                      <span className="flex flex-wrap gap-1.5">
+                        <button
+                          data-testid="card-history"
+                          onClick={() => togglePanel(a.id, 'history')}
+                          className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10.5px] ${panel[a.id] === 'history' ? 'border-accent text-ink' : 'border-line text-muted hover:text-ink'}`}
+                          title="수정 히스토리 — 글·이미지가 언제 누구 손으로 바뀌었는지, 되돌리기"
+                        >
+                          <History size={11} /> 히스토리
+                        </button>
+                        {scoped && (
+                          <button
+                            data-testid="card-copy"
+                            onClick={() => togglePanel(a.id, 'copy')}
+                            className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10.5px] ${panel[a.id] === 'copy' ? 'border-accent text-ink' : 'border-line text-muted hover:text-ink'}`}
+                            title={`${scoped} 에서 조금 다르게 쓸 새 에셋(_B)을 만든다`}
+                          >
+                            <Copy size={11} /> 복제해서 변형
+                          </button>
+                        )}
+                        {scoped && (seqsOf.get(a.id) ?? []).includes(scoped) && (
+                          <button
+                            data-testid="card-unlink"
+                            disabled={usingHere(a) > 0}
+                            onClick={() => void unlink(a)}
+                            className="flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:text-ink disabled:opacity-40"
+                            title={usingHere(a) ? `${scoped} 샷 ${usingHere(a)}개가 쓰고 있어 뺄 수 없습니다` : `${scoped} 에서 빼기 (에셋은 남는다)`}
+                          >
+                            <Unlink size={11} /> 이 씬에서 빼기
+                          </button>
+                        )}
+                      </span>
                       <span className="flex shrink-0 gap-1.5">
                         <button onClick={() => void generate([a.id])} className="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:text-ink">
                           전체 생성
                         </button>
                       </span>
                     </div>
+                    {panel[a.id] === 'history' && (
+                      <div className="mt-2">
+                        <AssetHistory asset={a} ep={ep} />
+                      </div>
+                    )}
+                    {panel[a.id] === 'copy' && scoped && (
+                      <AssetCopyForm
+                        asset={a}
+                        ep={ep}
+                        seq={scoped}
+                        taken={allAssets.map((x) => x.tag)}
+                        usingInSeq={usingHere(a)}
+                        onCancel={() => togglePanel(a.id, 'copy')}
+                        onDone={(m) => {
+                          setNotice(m)
+                          togglePanel(a.id, 'copy')
+                        }}
+                      />
+                    )}
                   </div>
                   )
                 })}
@@ -285,6 +369,19 @@ export default function AssetsView() {
           )
         })}
       </div>
+      {importing && scoped && (
+        <AssetImport
+          ep={ep}
+          seq={scoped}
+          assets={allAssets}
+          seqsOf={seqsOf}
+          onClose={() => setImporting(false)}
+          onDone={(m) => {
+            setNotice(m)
+            setImporting(false)
+          }}
+        />
+      )}
       {viewer && allAssets.find((x) => x.id === viewer.id) && (
         <AssetViewer
           key={viewer.id}
