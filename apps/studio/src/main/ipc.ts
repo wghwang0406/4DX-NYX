@@ -396,6 +396,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
       }
       clean.koSync = sync
     }
+    if (cur && patch?.koSyncRestore) {
+      const { field, entry } = patch.koSyncRestore
+      const base = (clean.koSync as typeof cur.koSync) ?? cur.koSync ?? {}
+      clean.koSync = Object.fromEntries([...Object.entries(base).filter(([k]) => k !== field), ...(entry ? [[field, entry]] : [])])
+    }
     const r = await store.patchAsset(ep, id, clean)
     return { staleShots: r.staleShots }
   })

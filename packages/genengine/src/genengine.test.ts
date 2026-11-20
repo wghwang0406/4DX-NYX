@@ -806,11 +806,17 @@ describe('에셋 한·영 맞추기 프롬프트', () => {
 
   it('enToKo: batches several assets and fields with ids', async () => {
     const { enToKoPrompt, promptInput } = await import('./prompts/align')
-    const p = enToKoPrompt([
-      { id: 'a1', tag: '@의현', field: 'masterProfileEn', en: 'Character acting as 의현. ...' },
-      { id: 'a2', tag: '@loc_도로', field: 'anchorEn', en: 'A night road.' },
-    ])
+    const p = enToKoPrompt(
+      [
+        { id: 'a1', tag: '@의현', field: 'masterProfileEn', en: 'Character acting as 의현. ...' },
+        { id: 'a2', tag: '@loc_도로', field: 'anchorEn', en: 'A night road.' },
+      ],
+      [{ id: 'a1', tag: '@의현', field: 'anchorEn', en: 'short neat black hair', ko: '흐트러진 흑발' }],
+    )
     expect(p).toContain('(레퍼런스와 100% 동일)')
-    expect(promptInput<Array<{ id: string }>>(p)!.map((x: { id: string }) => x.id)).toEqual(['a1', 'a2'])
+    expect(p).toContain('Part 2 — "compare"')
+    const inp = promptInput<{ translate: Array<{ id: string }>; compare: Array<{ ko: string }> }>(p)!
+    expect(inp.translate.map((x) => x.id)).toEqual(['a1', 'a2'])
+    expect(inp.compare[0].ko).toBe('흐트러진 흑발')
   })
 })

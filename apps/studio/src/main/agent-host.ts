@@ -9,7 +9,7 @@ import { createContiMcp, type JobView as McpJobView, type SpendKind, type SpendR
 import { adapters, pickAvailable, runStructured, type AgentEvent, type AgentKind, type AgentSession } from '@conti/agents'
 import { ProjectStore, writeAtomic, exists, readText } from '@conti/core'
 import { KO_PAIRS, assetJobCount, koState, withKoSync, type KoPairEn } from '@conti/domain'
-import { EN_TO_KO_SCHEMA, KO_TO_EN_SCHEMA, enToKoPrompt, koToEnPrompt, promptInput, type EnToKoItem, type KoToEnItem, JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, analyzeConti, driftCheck, engineFor, expandNeighbors, planRequest, type JobEvent, type JobRecord, type RunAi } from '@conti/genengine'
+import { EN_TO_KO_SCHEMA, KO_TO_EN_SCHEMA, enToKoPrompt, koToEnPrompt, promptInput, type EnToKoItem, type KoCheckItem, type KoToEnItem, JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, analyzeConti, driftCheck, engineFor, expandNeighbors, planRequest, type JobEvent, type JobRecord, type RunAi } from '@conti/genengine'
 import type { AgentAvailability, AgentUiEvent, ChatMessage, JobView, SpendPreview, SpendRequestView, ThreadInfo } from '../shared/agent-ipc'
 import type { FeedbackItem } from '../shared/publish-ipc'
 import { log } from './log'
@@ -101,8 +101,8 @@ export class AgentHost {
           return { data: { fields: inp.map((x) => ({ field: x.field, en: `[fake] ${x.koEdited}`, changesKo: [`${x.field} 바뀜 (fake)`] })) } }
         }
         if ('items' in props) {
-          const inp = promptInput<Array<{ id: string; field: string; en: string }>>(req.prompt) ?? []
-          return { data: { items: inp.map((x) => ({ id: x.id, field: x.field, ko: `[번역] ${x.en}` })) } }
+          const inp = promptInput<{ translate: Array<{ id: string; field: string; en: string }>; compare: Array<{ id: string; field: string }> }>(req.prompt)
+          return { data: { items: (inp?.translate ?? []).map((x) => ({ id: x.id, field: x.field, ko: `[번역] ${x.en}` })), checks: (inp?.compare ?? []).map((x) => ({ id: x.id, field: x.field, same: false, diffKo: ['머리 상태가 다름 (fake)'] })) } }
         }
         if ('checks' in props) return { data: { checks: [...req.prompt.matchAll(/- (\d{4}): generated image/g)].map((m) => ({ no: m[1], tag: '@?', ok: true })) } }
         const shots = [...req.prompt.matchAll(/- (\d{4}): storyboard = image \d+; listed size (\w+|\?); characters ([^;]*);/g)].map((m) => ({ no: m[1], shotSize: m[2] === '?' ? 'MS' : m[2], angleEn: 'eye-level', expressionEn: m[3] === 'none' ? '' : 'jaw set, a held blink', useConti: true, people: m[3] === 'none' ? 0 : m[3].split(',').length }))
@@ -137,55 +137,75 @@ export class AgentHost {
 
   private translating = new Set<string>()
   /**
-   * 영문 프롬프트를 읽을 한글로 옮겨 저장한다 — 영문이 새것(enNewer)인 칸만, 여러 에셋을 묶어 한 번에.
-   * force 는 '영문대로 한글 다시 쓰기' (한글이 새것이거나 예전 에셋이어도 영문 기준으로). 저장해도 stale 은 안 생긴다 (한글은 생성에 안 쓰임).
+   * 영문 프롬프트를 읽을 한글로 옮겨 저장한다 — 영문이 새것(enNewer)인 칸. 맞춰진 기록이 없는 예전 칸(unknown)은
+   * 같은 호출에서 한·영이 같은 내용인지 비교만 해 기록한다 (같으면 synced, 다르면 differs + 다른 점). 여러 에셋을 묶어 한 번에.
+   * force 는 '영문 기준으로 한글 고치기'. 한글은 생성에 안 쓰이므로 저장해도 stale 은 안 생긴다.
    */
-  async translateKo(ep: string, ids: string[], force?: KoPairEn[]): Promise<{ translated: number }> {
+  async translateKo(ep: string, ids: string[], force?: KoPairEn[]): Promise<{ translated: number; checked: number }> {
     const assets = (await this.store.listAssets(ep)).assets.filter((a) => ids.includes(a.id) && !this.translating.has(a.id))
-    const items: EnToKoItem[] = []
+    type Job = { kind: 'translate'; it: EnToKoItem } | { kind: 'check'; it: KoCheckItem }
+    const jobs: Job[] = []
     for (const a of assets)
       for (const p of KO_PAIRS) {
         const st = koState(a, p)
-        if (st === 'enNewer' || (force?.includes(p.en) && st !== 'empty')) items.push({ id: a.id, tag: a.tag, field: p.en, en: a[p.en] ?? '' })
+        const en = a[p.en] ?? ''
+        if (st === 'enNewer' || (force?.includes(p.en) && st !== 'empty')) jobs.push({ kind: 'translate', it: { id: a.id, tag: a.tag, field: p.en, en } })
+        else if (st === 'unknown') jobs.push({ kind: 'check', it: { id: a.id, tag: a.tag, field: p.en, en, ko: a[p.ko] ?? '' } })
       }
-    if (!items.length) return { translated: 0 }
-    const busy = [...new Set(items.map((x) => x.id))]
+    if (!jobs.length) return { translated: 0, checked: 0 }
+    const busy = [...new Set(jobs.map((x) => x.it.id))]
     busy.forEach((x) => this.translating.add(x))
     try {
       const run = await this.aiRunner()
       // 마스터 프로필이 길어 한 번에 너무 많이 보내지 않는다 (~9천 자씩)
-      const chunks: EnToKoItem[][] = [[]]
+      const chunks: Job[][] = [[]]
       let size = 0
-      for (const it of items) {
-        if (size + it.en.length > 9000 && chunks.at(-1)!.length) {
+      for (const j of jobs) {
+        const len = j.it.en.length + (j.kind === 'check' ? j.it.ko.length : 0)
+        if (size + len > 9000 && chunks.at(-1)!.length) {
           chunks.push([])
           size = 0
         }
-        chunks.at(-1)!.push(it)
-        size += it.en.length
+        chunks.at(-1)!.push(j)
+        size += len
       }
-      let n = 0
+      let translated = 0
+      let checked = 0
       for (const chunk of chunks) {
-        const r = await run<{ items: Array<{ id: string; field: string; ko: string }> }>({ prompt: enToKoPrompt(chunk), images: [], schema: EN_TO_KO_SCHEMA as unknown as Record<string, unknown> })
-        for (const id of new Set(chunk.map((x) => x.id))) {
+        const tr = chunk.flatMap((j) => (j.kind === 'translate' ? [j.it] : []))
+        const ck = chunk.flatMap((j) => (j.kind === 'check' ? [j.it] : []))
+        const r = await run<{ items?: Array<{ id: string; field: string; ko: string }>; checks?: Array<{ id: string; field: string; same: boolean; diffKo?: string[] }> }>({
+          prompt: enToKoPrompt(tr, ck),
+          images: [],
+          schema: EN_TO_KO_SCHEMA as unknown as Record<string, unknown>,
+        })
+        for (const id of new Set(chunk.map((x) => x.it.id))) {
           const cur = (await this.store.listAssets(ep)).assets.find((x) => x.id === id)
           if (!cur) continue
           const patch: Record<string, unknown> = {}
           let sync = cur.koSync
-          for (const it of chunk.filter((x) => x.id === id)) {
+          for (const it of tr.filter((x) => x.id === id)) {
             const ko = (r.data.items?.find((x) => x.id === id && x.field === it.field)?.ko ?? '').trim()
             const pair = KO_PAIRS.find((p) => p.en === it.field)!
             // 그사이 영문이 또 바뀌었으면 버린다 (다음에 다시 옮김)
             if (!ko || (cur[pair.en] ?? '').trim() !== it.en.trim()) continue
             patch[pair.ko] = ko
             sync = withKoSync({ koSync: sync }, pair.en, { en: it.en, ko })
-            n++
+            translated++
           }
-          if (Object.keys(patch).length) await this.store.patchAsset(ep, id, { ...patch, koSync: sync })
+          for (const it of ck.filter((x) => x.id === id)) {
+            const got = r.data.checks?.find((x) => x.id === id && x.field === it.field)
+            const pair = KO_PAIRS.find((p) => p.en === it.field)!
+            if (!got || (cur[pair.en] ?? '').trim() !== it.en.trim() || (cur[pair.ko] ?? '').trim() !== it.ko.trim()) continue
+            const diffKo = got.same ? [] : (got.diffKo ?? []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 8)
+            sync = withKoSync({ koSync: sync }, pair.en, { en: it.en, ko: it.ko, diffKo: got.same ? undefined : diffKo.length ? diffKo : ['내용이 다릅니다'] })
+            checked++
+          }
+          if (Object.keys(patch).length || sync !== cur.koSync) await this.store.patchAsset(ep, id, { ...patch, koSync: sync })
         }
       }
-      log('info', `영문→한글 ${n}칸 (${busy.length}개 에셋, ${chunks.length}회 호출)`)
-      return { translated: n }
+      log('info', `영문→한글 ${translated}칸 · 비교 ${checked}칸 (${busy.length}개 에셋, ${chunks.length}회 호출)`)
+      return { translated, checked }
     } finally {
       busy.forEach((x) => this.translating.delete(x))
     }

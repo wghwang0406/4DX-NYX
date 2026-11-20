@@ -202,41 +202,49 @@ function createWindow(): BrowserWindow {
         const text = (sel: string) => js(`document.querySelector(${JSON.stringify(sel)})?.textContent ?? null`)
         const click = (testid: string) => js(`(() => { const b = document.querySelector('[data-testid=${testid}]'); if (!b) return false; b.click(); return true })()`)
         const r: Record<string, unknown> = {}
+        const state = (f: string) => js(`document.querySelector('[data-pair=${f}]')?.dataset.state ?? null`)
         try {
-          // 1) 펼친 카드: 마스터 프로필·Voice 한글이 자동으로 채워진다
-          r.translated = await until(`(document.querySelector('[data-testid=ko-voiceEn]')?.textContent ?? '').length > 2 && !document.querySelector('[data-testid=ko-voiceEn]').textContent.includes('옮기는 중')`, 120000)
-          r.view = { anchor: await text('[data-testid=ko-anchorEn]'), voice: await text('[data-testid=ko-voiceEn]'), profile: await text('[data-testid=ko-masterProfileEn]'), anchorOff: !!(await text('[data-testid=ko-off-anchorEn]')), enHidden: !(await js(`document.querySelector('[data-testid=asset-detail]').textContent.includes(${JSON.stringify('100% matches')})`)) }
-          await click('show-en-voiceEn')
-          await wait(200)
-          r.enShown = await js(`document.querySelector('[data-pair=voiceEn]').textContent`)
+          // 1) 펼치면: 한글 없는 칸은 번역, 맞춰진 기록이 없는 예전 칸(외형)은 한·영 비교 → 실제로 다를 때만 다른 점 표시
+          r.translated = await until(`(document.querySelector('[data-testid=text-voiceEn]')?.textContent ?? '').length > 2 && !document.querySelector('[data-testid=text-voiceEn]').textContent.includes('옮기는 중') && document.querySelector('[data-pair=anchorEn]')?.dataset.state !== 'unknown'`, 120000)
+          r.view = { voice: await text('[data-testid=text-voiceEn]'), profile: (await text('[data-testid=text-masterProfileEn]'))?.slice(0, 80), anchorState: await state('anchorEn'), anchorDiff: await js(`[...document.querySelectorAll('[data-testid=ko-off-anchorEn] [data-diff]')].map((d) => d.textContent)`) }
           await snap('asset_ko_view')
-          // 2) 어긋난 외형 → 한글대로 영문 맞추기 (수정 화면에서 바로 변환)
-          await click('align-anchorEn')
-          r.alignConverted = await until(`!!document.querySelector('[data-testid=changes-anchorEn] [data-change]')`, 120000)
-          r.alignChanges = await js(`[...document.querySelectorAll('[data-testid=changes-anchorEn] [data-change]')].map((d) => d.textContent)`)
-          await snap('asset_align_preview')
-          await click('asset-save')
-          r.alignSaved = await until(`!!document.querySelector('[data-testid=asset-notice]')`, 8000)
-          r.alignNotice = await text('[data-testid=asset-notice]')
-          r.anchorOffAfter = !!(await text('[data-testid=ko-off-anchorEn]'))
-          // 3) Voice 한글 고치기 → 저장(영문 반영) → 바뀐 점 → 이대로 저장
-          await click('asset-edit')
-          await until(`!!document.querySelector('[data-testid=edit-voiceKo]')`, 4000)
-          await type('edit-voiceKo', process.env.CONTI_E2E_ASSET_VOICE_KO ?? '"20대 후반 여성. 낮고 건조한 목소리, 화가 나면 오히려 느려진다."')
-          await wait(200)
-          r.statusBefore = await text('[data-testid=editor-status]')
-          await click('asset-save')
-          r.voiceConverted = await until(`!!document.querySelector('[data-testid=changes-voiceEn]')`, 120000)
-          r.voiceChanges = await js(`[...document.querySelectorAll('[data-testid=changes-voiceEn] [data-change]')].map((d) => d.textContent)`)
-          r.saveLabel = await text('[data-testid=asset-save]')
-          await snap('asset_voice_preview')
-          if (process.env.CONTI_E2E_ASSET_SAVE !== '0') {
-            await click('asset-save')
-            r.voiceSaved = await until(`!document.querySelector('[data-testid=asset-editor]')`, 8000)
-            await wait(300)
-            r.after = { voice: await text('[data-testid=ko-voiceEn]'), voiceState: await js(`document.querySelector('[data-pair=voiceEn]')?.dataset.state`), anchorState: await js(`document.querySelector('[data-pair=anchorEn]')?.dataset.state`) }
-            await snap('asset_saved')
+          if (process.env.CONTI_E2E_ASSET_VIEWONLY) throw new Error('view-only')
+          // 2) KR ↔ EN 토글: 그 칸 글자가 바뀌고 버튼 글자도 바뀐다
+          await click('lang-voiceEn')
+          await wait(150)
+          r.toggleEn = { button: await text('[data-testid=lang-voiceEn]'), lang: await js(`document.querySelector('[data-testid=text-voiceEn]').dataset.lang`), text: await text('[data-testid=text-voiceEn]') }
+          await click('lang-voiceEn')
+          await wait(150)
+          r.toggleKo = { button: await text('[data-testid=lang-voiceEn]'), lang: await js(`document.querySelector('[data-testid=text-voiceEn]').dataset.lang`) }
+          // 3) 글자를 눌러 바로 고치기 (한글) → 바깥 클릭 → 영문이 다시 쓰이고 바뀐 점
+          await click('text-voiceEn')
+          await until(`!!document.querySelector('[data-testid=inline-voiceKo]')`, 3000)
+          await type('inline-voiceKo', process.env.CONTI_E2E_ASSET_VOICE_KO ?? '"20대 후반 여성. 낮고 건조한 목소리, 화가 나면 오히려 느려진다."')
+          await js(`document.querySelector('[data-testid=inline-voiceKo]').blur()`)
+          r.voiceSaved = await until(`!!document.querySelector('[data-testid=note-voiceEn]')`, 120000)
+          r.voiceNote = await text('[data-testid=note-voiceEn]')
+          r.voiceState = await state('voiceEn')
+          await snap('asset_voice_edited')
+          // 4) 실제로 다른 외형 → 한글 기준으로 영문 고치기
+          if (await click('fix-en-anchorEn')) {
+            r.anchorFixed = await until(`!!document.querySelector('[data-testid=note-anchorEn]')`, 120000)
+            r.anchorNote = await text('[data-testid=note-anchorEn]')
+            r.anchorStateAfter = await state('anchorEn')
           }
+          // 5) Voice 되돌리기
+          const before = r.voiceNote
+          await click('undo-voiceEn')
+          r.undone = await until(`!document.querySelector('[data-testid=note-voiceEn]')`, 6000)
+          await wait(300)
+          r.voiceAfterUndo = { text: await text('[data-testid=text-voiceEn]'), state: await state('voiceEn'), hadNote: !!before }
+          // 6) 이름 바로 고치기
+          await click('name-text')
+          await until(`!!document.querySelector('[data-testid=inline-nameKo]')`, 3000)
+          await type('inline-nameKo', '해수(형사)')
+          await js(`document.querySelector('[data-testid=inline-nameKo]').blur()`)
+          await until(`(document.querySelector('[data-testid=name-text]')?.textContent ?? '') === '해수(형사)'`, 4000)
+          r.name = await text('[data-testid=name-text]')
+          await snap('asset_saved')
         } catch (e) {
           r.error = String((e as Error).stack ?? e)
         }

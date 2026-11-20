@@ -63,5 +63,9 @@ describe('asset Korean/English pairs (koState)', () => {
     expect(koState({ ...a, anchorEn: 'messy hair' }, anchor)).toBe('enNewer')
     expect(koState({ ...a, descriptionKo: '흐트러진 머리' }, anchor)).toBe('koNewer')
     expect(koState({ ...a, anchorEn: 'neat  hair ' }, anchor)).toBe('synced') // 공백 차이는 무시
+    // 비교해 보니 다름 → differs, 한쪽을 고치면 다시 enNewer/koNewer
+    const d = { ...a, koSync: withKoSync(a, 'anchorEn', { en: 'neat hair', ko: '단정한 머리', diffKo: ['영문엔 붕대가 없음'] }) }
+    expect(koState(d, anchor)).toBe('differs')
+    expect(koState({ ...d, descriptionKo: '붕대' }, anchor)).toBe('koNewer')
   })
 })

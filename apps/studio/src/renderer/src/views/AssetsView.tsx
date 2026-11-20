@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Box, User, MapPin, Package, Play, Images, ChevronDown, ChevronRight, ChevronsUpDown, Pencil } from 'lucide-react'
+import { Box, User, MapPin, Package, Play, Images, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react'
 import { ASSET_VIEWS, KO_PAIRS, koState, type Asset, type KoPairEn } from '@conti/domain'
 import { useProject } from '../state/project'
 import { fileUrl } from '../data/adapters'
 import AssetViewer from '../components/AssetViewer'
-import AssetEditor from '../components/AssetEditor'
 import AssetKoView from '../components/AssetKoView'
 
 const KIND_LABEL = { char: '등장체', loc: '배경', prop: '소품' } as const
@@ -21,15 +20,11 @@ export default function AssetsView() {
   // 크게 보기 (썸네일 클릭) — 다시 생성은 뷰어 안의 버튼으로만
   const [viewer, setViewer] = useState<{ id: string; view: string } | null>(null)
   const viewerOpened = useRef(false)
-  const editOpened = useRef(false)
   // 펼친 카드 — 잘린 설명·앵커 전체를 본다 (화면 상태만, 저장 안 함)
   const [open, setOpen] = useState<Set<string>>(new Set())
-  // 수정 중인 카드 하나 + 카드별 저장 안내
-  const [editing, setEditing] = useState<{ id: string; align?: KoPairEn[] } | null>(null)
   // 영문 프롬프트를 한글로 옮기는 중인 카드 / 실패 이유 (펼치면 자동으로 옮긴다)
   const [translating, setTranslating] = useState<Set<string>>(new Set())
   const [tFailed, setTFailed] = useState<Record<string, string>>({})
-  const [notice, setNotice] = useState<{ id: string; text: string } | null>(null)
   const toggle = (id: string) =>
     setOpen((prev) => {
       const next = new Set(prev)
@@ -43,14 +38,6 @@ export default function AssetsView() {
       const list = await window.conti.api.assets.list(ep)
       setAssets(list)
       if (new URLSearchParams(window.location.search).get('expand') === '1') setOpen(new Set(list.map((a) => a.id)))
-      // 검증용: ?edit=@태그 면 그 카드를 펼쳐 수정 모드로
-      const ed = new URLSearchParams(window.location.search).get('edit')
-      const edHit = ed ? list.find((a) => a.tag === ed) : undefined
-      if (edHit && !editOpened.current) {
-        editOpened.current = true
-        setOpen((p) => new Set([...p, edHit.id]))
-        setEditing({ id: edHit.id })
-      }
       // 캡처용: ?view=@태그:뷰 면 그 이미지를 크게 연다
       const want = new URLSearchParams(window.location.search).get('view')
       const hit = want ? list.find((a) => a.tag === want.split(':')[0]) : undefined
@@ -69,7 +56,7 @@ export default function AssetsView() {
     })
   }, [ep]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 영문 프롬프트 → 한글 (펼친 카드 중 한글이 없거나 영문이 나중에 바뀐 칸). 여러 카드를 한 번에 묶어 AI 1회
+  // 영문 프롬프트 → 한글 (펼친 카드 중 한글이 없거나 영문이 나중에 바뀐 칸) + 예전 칸은 한·영 비교. 여러 카드를 묶어 AI 1회
   const asked = useRef(new Set<string>())
   async function translate(ids: string[], force?: KoPairEn[]) {
     if (!ids.length) return
@@ -86,9 +73,10 @@ export default function AssetsView() {
     }
   }
   useEffect(() => {
-    const need = assets.filter((a) => open.has(a.id) && !translating.has(a.id) && !tFailed[a.id] && KO_PAIRS.some((p) => koState(a, p) === 'enNewer'))
+    const todoState = (a: Asset) => KO_PAIRS.filter((p) => ['enNewer', 'unknown'].includes(koState(a, p)))
+    const need = assets.filter((a) => open.has(a.id) && !translating.has(a.id) && !tFailed[a.id] && todoState(a).length)
     // 같은 영문으로 두 번 부르지 않게 — 영문이 바뀌면(키가 달라지면) 다시
-    const key = (a: Asset) => `${a.id}:${KO_PAIRS.map((p) => a[p.en] ?? '').join('|').length}:${KO_PAIRS.filter((p) => koState(a, p) === 'enNewer').map((p) => p.en).join(',')}`
+    const key = (a: Asset) => `${a.id}:${KO_PAIRS.map((p) => a[p.en] ?? '').join('|').length}:${todoState(a).map((p) => p.en).join(',')}`
     const todo = need.filter((a) => !asked.current.has(key(a)))
     if (!todo.length) return
     todo.forEach((a) => asked.current.add(key(a)))
@@ -169,11 +157,7 @@ export default function AssetsView() {
                   const expanded = open.has(a.id)
                   return (
                   <div key={a.id} data-asset={a.tag} className="mb-2 rounded-md border border-line/70 bg-panel-2/60 p-2.5">
-                    <button
-                      onClick={() => editing?.id !== a.id && toggle(a.id)}
-                      className={`block w-full text-left ${editing?.id === a.id ? 'cursor-default' : ''}`}
-                      title={editing?.id === a.id ? undefined : expanded ? '접기' : '눌러서 설명 전체 보기'}
-                    >
+                    <button onClick={() => toggle(a.id)} className="block w-full text-left" title={expanded ? '접기' : '눌러서 펼치기'}>
                       <div className="flex items-baseline justify-between">
                         <span className="flex items-center gap-1 font-mono text-[12px] text-accent">
                           {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -183,40 +167,15 @@ export default function AssetsView() {
                           {a.subkind ?? ''} {a.state !== 'base' ? `· ${a.state}` : ''}
                         </span>
                       </div>
-                      <div className="mt-0.5 text-[12.5px]">{a.nameKo}</div>
+                      {!expanded && <div className="mt-0.5 text-[12.5px]">{a.nameKo}</div>}
                       {a.descriptionKo && !expanded && (
                         <div title={a.descriptionKo} className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-muted">
                           {a.descriptionKo}
                         </div>
                       )}
                     </button>
-                    {expanded && editing?.id === a.id && (
-                      <AssetEditor
-                        asset={a}
-                        ep={ep}
-                        alignFields={editing?.align}
-                        onClose={(text) => {
-                          setEditing(null)
-                          setNotice(text ? { id: a.id, text } : null)
-                        }}
-                      />
-                    )}
-                    {expanded && editing?.id !== a.id && (
-                      <AssetKoView
-                        asset={a}
-                        translating={translating.has(a.id)}
-                        failed={tFailed[a.id]}
-                        onAlign={(fields) => {
-                          setNotice(null)
-                          setEditing({ id: a.id, align: fields })
-                        }}
-                        onRetranslate={(fields) => void translate([a.id], fields)}
-                      />
-                    )}
-                    {notice?.id === a.id && (
-                      <div data-testid="asset-notice" className="mt-1.5 text-[10.5px] text-muted">
-                        ✓ {notice.text}
-                      </div>
+                    {expanded && (
+                      <AssetKoView asset={a} ep={ep} translating={translating.has(a.id)} failed={tFailed[a.id]} onRetranslate={(fields) => void translate([a.id], fields)} />
                     )}
                     <div className="mt-2 flex gap-1.5">
                       {ASSET_VIEWS[kind].map((v) => {
@@ -238,19 +197,6 @@ export default function AssetsView() {
                     <div className="mt-1.5 flex items-center justify-between gap-2">
                       <span />
                       <span className="flex shrink-0 gap-1.5">
-                        {expanded && editing?.id !== a.id && (
-                          <button
-                            data-testid="asset-edit"
-                            onClick={() => {
-                              setNotice(null)
-                              setEditing({ id: a.id })
-                            }}
-                            className="flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:text-ink"
-                            title="한글 설명·영문 프롬프트를 직접 고칩니다"
-                          >
-                            <Pencil size={11} /> 수정
-                          </button>
-                        )}
                         <button onClick={() => void generate([a.id])} className="rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:text-ink">
                           전체 생성
                         </button>

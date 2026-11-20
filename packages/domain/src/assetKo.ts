@@ -22,10 +22,11 @@ export const KO_PAIRS: readonly KoPair[] = [
  * - synced: 맞춰진 그대로
  * - enNewer: 영문이 나중에 바뀌었거나 한글이 아직 없다 → 영문을 한글로 옮기면 된다 (자동)
  * - koNewer: 한글만 바뀌었다 → 한글대로 영문을 다시 써야 생성에 반영된다
- * - unknown: 둘 다 있는데 맞춰진 기록이 없다 (예전 에셋) → 사람이 방향을 고른다
+ * - unknown: 둘 다 있는데 맞춰진 기록이 없다 (예전 에셋) → AI 가 자동으로 비교한다
+ * - differs: 비교해 보니 내용이 다르다 (diffKo) → 사람이 어느 쪽 기준으로 맞출지 고른다
  * - empty: 영문이 비었다 (한글만 있거나 둘 다 없음)
  */
-export type KoState = 'synced' | 'enNewer' | 'koNewer' | 'unknown' | 'empty'
+export type KoState = 'synced' | 'enNewer' | 'koNewer' | 'unknown' | 'differs' | 'empty'
 
 const norm = (s?: string) => (s ?? '').replace(/\s+/g, ' ').trim()
 
@@ -38,12 +39,12 @@ export function koState(a: Pick<Asset, KoPairEn | KoPairKo | 'koSync'>, pair: Ko
   if (!s) return 'unknown'
   const enSame = norm(s.en) === en
   const koSame = norm(s.ko) === ko
-  if (enSame && koSame) return 'synced'
+  if (enSame && koSame) return s.diffKo?.length ? 'differs' : 'synced'
   if (!enSame) return 'enNewer' // 영문이 바뀌었으면 영문이 새것 (생성에 실제로 쓰이는 쪽)
   return 'koNewer'
 }
 
 /** 두 값을 맞춰진 것으로 기록한 koSync */
-export function withKoSync(a: Pick<Asset, 'koSync'>, en: KoPairEn, values: { en: string; ko: string }): NonNullable<Asset['koSync']> {
-  return { ...(a.koSync ?? {}), [en]: { en: values.en.trim(), ko: values.ko.trim() } }
+export function withKoSync(a: Pick<Asset, 'koSync'>, en: KoPairEn, values: { en: string; ko: string; diffKo?: string[] }): NonNullable<Asset['koSync']> {
+  return { ...(a.koSync ?? {}), [en]: { en: values.en.trim(), ko: values.ko.trim(), ...(values.diffKo?.length ? { diffKo: values.diffKo } : {}) } }
 }
