@@ -8,8 +8,8 @@ import { randomUUID } from 'node:crypto'
 import { createContiMcp, type JobView as McpJobView, type SpendKind, type SpendRequest } from '@conti/mcp'
 import { adapters, pickAvailable, runStructured, type AgentEvent, type AgentKind, type AgentSession } from '@conti/agents'
 import { ProjectStore, writeAtomic, exists, readText } from '@conti/core'
-import { assetJobCount } from '@conti/domain'
-import { ANCHOR_ALIGN_SCHEMA, anchorAlignPrompt, JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, analyzeConti, driftCheck, engineFor, expandNeighbors, planRequest, type JobEvent, type JobRecord, type RunAi } from '@conti/genengine'
+import { KO_PAIRS, assetJobCount, koState, withKoSync, type KoPairEn } from '@conti/domain'
+import { EN_TO_KO_SCHEMA, KO_TO_EN_SCHEMA, enToKoPrompt, koToEnPrompt, promptInput, type EnToKoItem, type KoToEnItem, JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, analyzeConti, driftCheck, engineFor, expandNeighbors, planRequest, type JobEvent, type JobRecord, type RunAi } from '@conti/genengine'
 import type { AgentAvailability, AgentUiEvent, ChatMessage, JobView, SpendPreview, SpendRequestView, ThreadInfo } from '../shared/agent-ipc'
 import type { FeedbackItem } from '../shared/publish-ipc'
 import { log } from './log'
@@ -96,9 +96,13 @@ export class AgentHost {
     if (process.env.CONTI_FAKE_ANALYSIS) {
       return (async (req: { prompt: string; schema: Record<string, unknown> }) => {
         const props = (req.schema as { properties: Record<string, unknown> }).properties
-        if ('anchorEn' in props) {
-          const ko = /Korean description \(source of truth\):\n([\s\S]*?)\nCurrent English anchor:/.exec(req.prompt)?.[1] ?? ''
-          return { data: { anchorEn: `[fake] ${ko.replace(/\s+/g, ' ').trim()} 100% matches the reference.`, changesKo: ['머리: 단정함 → 흐트러짐 (fake)'] } }
+        if ('fields' in props) {
+          const inp = promptInput<Array<{ field: string; koEdited: string }>>(req.prompt) ?? []
+          return { data: { fields: inp.map((x) => ({ field: x.field, en: `[fake] ${x.koEdited}`, changesKo: [`${x.field} 바뀜 (fake)`] })) } }
+        }
+        if ('items' in props) {
+          const inp = promptInput<Array<{ id: string; field: string; en: string }>>(req.prompt) ?? []
+          return { data: { items: inp.map((x) => ({ id: x.id, field: x.field, ko: `[번역] ${x.en}` })) } }
         }
         if ('checks' in props) return { data: { checks: [...req.prompt.matchAll(/- (\d{4}): generated image/g)].map((m) => ({ no: m[1], tag: '@?', ok: true })) } }
         const shots = [...req.prompt.matchAll(/- (\d{4}): storyboard = image \d+; listed size (\w+|\?); characters ([^;]*);/g)].map((m) => ({ no: m[1], shotSize: m[2] === '?' ? 'MS' : m[2], angleEn: 'eye-level', expressionEn: m[3] === 'none' ? '' : 'jaw set, a held blink', useConti: true, people: m[3] === 'none' ? 0 : m[3].split(',').length }))
@@ -113,17 +117,78 @@ export class AgentHost {
     }) as unknown as RunAi
   }
 
-  /** 에셋 카드 [한글대로 영문 맞추기] — 한글 설명을 기준으로 외형 앵커를 다시 쓴다. 텍스트만 보내고 저장하지 않는다 */
-  async alignAnchor(ep: string, id: string, draft: { nameKo: string; descriptionKo: string; anchorEn: string }): Promise<{ anchorEn: string; changesKo: string[] }> {
+  /** 에셋 카드 저장 전 — 고친 한글대로 영문을 다시 쓴다 (필드별 원문 규격). 텍스트만, 저장하지 않는다 */
+  async koToEn(ep: string, id: string, items: KoToEnItem[]): Promise<Array<{ field: KoPairEn; en: string; changesKo: string[] }>> {
     const a = (await this.store.listAssets(ep)).assets.find((x) => x.id === id)
     if (!a) throw new Error(`에셋 없음: ${id}`)
-    if (!draft.descriptionKo.trim()) throw new Error('한글 설명이 비어 있어 맞출 기준이 없습니다')
+    const todo = items.filter((it) => KO_PAIRS.some((p) => p.en === it.field) && it.ko.trim())
+    if (!todo.length) return []
     const run = await this.aiRunner()
-    const r = await run<{ anchorEn: string; changesKo?: string[] }>({ prompt: anchorAlignPrompt(a, draft), images: [], schema: ANCHOR_ALIGN_SCHEMA as unknown as Record<string, unknown> })
-    const anchorEn = (r.data.anchorEn ?? '').replace(/\s+/g, ' ').trim()
-    if (!anchorEn) throw new Error('AI 가 빈 앵커를 돌려줬습니다 — 다시 눌러 보세요')
-    log('info', `영문 맞추기 ${a.tag}: ${draft.anchorEn.length}→${anchorEn.length}자`)
-    return { anchorEn, changesKo: (r.data.changesKo ?? []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 12) }
+    const r = await run<{ fields: Array<{ field: string; en: string; changesKo?: string[] }> }>({ prompt: koToEnPrompt(a, todo), images: [], schema: KO_TO_EN_SCHEMA as unknown as Record<string, unknown> })
+    const out = todo.map((it) => {
+      const got = r.data.fields?.find((f) => f.field === it.field)
+      const en = (got?.en ?? '').trim()
+      if (!en) throw new Error(`AI 가 ${it.field} 영문을 비워 돌려줬습니다 — 다시 눌러 보세요`)
+      return { field: it.field, en, changesKo: (got?.changesKo ?? []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 12) }
+    })
+    log('info', `한글→영문 ${a.tag}: ${out.map((o) => o.field).join(', ')}`)
+    return out
+  }
+
+  private translating = new Set<string>()
+  /**
+   * 영문 프롬프트를 읽을 한글로 옮겨 저장한다 — 영문이 새것(enNewer)인 칸만, 여러 에셋을 묶어 한 번에.
+   * force 는 '영문대로 한글 다시 쓰기' (한글이 새것이거나 예전 에셋이어도 영문 기준으로). 저장해도 stale 은 안 생긴다 (한글은 생성에 안 쓰임).
+   */
+  async translateKo(ep: string, ids: string[], force?: KoPairEn[]): Promise<{ translated: number }> {
+    const assets = (await this.store.listAssets(ep)).assets.filter((a) => ids.includes(a.id) && !this.translating.has(a.id))
+    const items: EnToKoItem[] = []
+    for (const a of assets)
+      for (const p of KO_PAIRS) {
+        const st = koState(a, p)
+        if (st === 'enNewer' || (force?.includes(p.en) && st !== 'empty')) items.push({ id: a.id, tag: a.tag, field: p.en, en: a[p.en] ?? '' })
+      }
+    if (!items.length) return { translated: 0 }
+    const busy = [...new Set(items.map((x) => x.id))]
+    busy.forEach((x) => this.translating.add(x))
+    try {
+      const run = await this.aiRunner()
+      // 마스터 프로필이 길어 한 번에 너무 많이 보내지 않는다 (~9천 자씩)
+      const chunks: EnToKoItem[][] = [[]]
+      let size = 0
+      for (const it of items) {
+        if (size + it.en.length > 9000 && chunks.at(-1)!.length) {
+          chunks.push([])
+          size = 0
+        }
+        chunks.at(-1)!.push(it)
+        size += it.en.length
+      }
+      let n = 0
+      for (const chunk of chunks) {
+        const r = await run<{ items: Array<{ id: string; field: string; ko: string }> }>({ prompt: enToKoPrompt(chunk), images: [], schema: EN_TO_KO_SCHEMA as unknown as Record<string, unknown> })
+        for (const id of new Set(chunk.map((x) => x.id))) {
+          const cur = (await this.store.listAssets(ep)).assets.find((x) => x.id === id)
+          if (!cur) continue
+          const patch: Record<string, unknown> = {}
+          let sync = cur.koSync
+          for (const it of chunk.filter((x) => x.id === id)) {
+            const ko = (r.data.items?.find((x) => x.id === id && x.field === it.field)?.ko ?? '').trim()
+            const pair = KO_PAIRS.find((p) => p.en === it.field)!
+            // 그사이 영문이 또 바뀌었으면 버린다 (다음에 다시 옮김)
+            if (!ko || (cur[pair.en] ?? '').trim() !== it.en.trim()) continue
+            patch[pair.ko] = ko
+            sync = withKoSync({ koSync: sync }, pair.en, { en: it.en, ko })
+            n++
+          }
+          if (Object.keys(patch).length) await this.store.patchAsset(ep, id, { ...patch, koSync: sync })
+        }
+      }
+      log('info', `영문→한글 ${n}칸 (${busy.length}개 에셋, ${chunks.length}회 호출)`)
+      return { translated: n }
+    } finally {
+      busy.forEach((x) => this.translating.delete(x))
+    }
   }
 
   /** AI 에 보낼 크기(긴 변 1024 JPEG)로 줄인 임시 파일 */

@@ -264,6 +264,18 @@ describe('assets', () => {
     expect(md).toContain('## 배경\n\n### @loc_카페\n- state: day')
     expect(JSON.parse(await readFile(join(root, '.conti', 'episodes', 'EP01', 'assets.json'), 'utf8')).assets).toHaveLength(2)
   })
+
+  it('records Korean/English pairs given together as synced (the card then skips translating them)', async () => {
+    const { koState, KO_PAIRS } = await import('@conti/domain')
+    await call('assets_upsert', { ep: 'EP02', asset: { tag: '@민', kind: 'char', nameKo: '민', descriptionKo: '짧은 흑발', anchorEn: '30yo man, short black hair.', voiceEn: '"Low voice."', voiceKo: '"낮은 목소리."', masterProfileEn: 'Character acting as 민.' } })
+    let a = json(await call('assets_get', { ep: 'EP02', idOrTag: '@민' }))
+    const st = (x: typeof a) => Object.fromEntries(KO_PAIRS.map((p) => [p.en, koState(x, p)]))
+    expect(st(a)).toMatchObject({ anchorEn: 'synced', voiceEn: 'synced', masterProfileEn: 'enNewer', cameraAnchorEn: 'empty' })
+    // 영문만 바꾸면 그 칸은 영문이 새것 → 카드가 다시 옮긴다
+    await call('assets_upsert', { ep: 'EP02', asset: { tag: '@민', kind: 'char', nameKo: '민', voiceEn: '"Dry voice."' } })
+    a = json(await call('assets_get', { ep: 'EP02', idOrTag: '@민' }))
+    expect(st(a)).toMatchObject({ anchorEn: 'synced', voiceEn: 'enNewer' })
+  })
 })
 
 describe('spec / image / ui', () => {

@@ -48,3 +48,20 @@ describe('schemas', () => {
     expect(() => Project.parse({ ...p, code: 'bad code' })).toThrow()
   })
 })
+
+describe('asset Korean/English pairs (koState)', () => {
+  it('tells which side is newer', async () => {
+    const { KO_PAIRS, koState, withKoSync } = await import('./assetKo')
+    const anchor = KO_PAIRS[0]
+    const voice = KO_PAIRS.find((p) => p.en === 'voiceEn')!
+    const a = { anchorEn: 'neat hair', descriptionKo: '단정한 머리', voiceEn: '"Low voice."', koSync: undefined as undefined | Record<string, { en: string; ko: string }> }
+    expect(koState(a, anchor)).toBe('unknown') // 예전 에셋: 둘 다 있는데 기록 없음
+    expect(koState(a, voice)).toBe('enNewer') // 한글 없음 → 옮기면 된다
+    expect(koState({ ...a, voiceEn: '' }, voice)).toBe('empty')
+    a.koSync = withKoSync(a, 'anchorEn', { en: 'neat hair', ko: '단정한 머리' })
+    expect(koState(a, anchor)).toBe('synced')
+    expect(koState({ ...a, anchorEn: 'messy hair' }, anchor)).toBe('enNewer')
+    expect(koState({ ...a, descriptionKo: '흐트러진 머리' }, anchor)).toBe('koNewer')
+    expect(koState({ ...a, anchorEn: 'neat  hair ' }, anchor)).toBe('synced') // 공백 차이는 무시
+  })
+})

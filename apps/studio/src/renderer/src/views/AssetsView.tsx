@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Box, User, MapPin, Package, Play, Images, ChevronDown, ChevronRight, ChevronsUpDown, Pencil } from 'lucide-react'
-import { ASSET_VIEWS, type Asset } from '@conti/domain'
+import { ASSET_VIEWS, KO_PAIRS, koState, type Asset, type KoPairEn } from '@conti/domain'
 import { useProject } from '../state/project'
 import { fileUrl } from '../data/adapters'
 import AssetViewer from '../components/AssetViewer'
 import AssetEditor from '../components/AssetEditor'
+import AssetKoView from '../components/AssetKoView'
 
 const KIND_LABEL = { char: '등장체', loc: '배경', prop: '소품' } as const
 const KIND_ICON = { char: User, loc: MapPin, prop: Package } as const
@@ -24,7 +25,10 @@ export default function AssetsView() {
   // 펼친 카드 — 잘린 설명·앵커 전체를 본다 (화면 상태만, 저장 안 함)
   const [open, setOpen] = useState<Set<string>>(new Set())
   // 수정 중인 카드 하나 + 카드별 저장 안내
-  const [editing, setEditing] = useState<string | null>(null)
+  const [editing, setEditing] = useState<{ id: string; align?: KoPairEn[] } | null>(null)
+  // 영문 프롬프트를 한글로 옮기는 중인 카드 / 실패 이유 (펼치면 자동으로 옮긴다)
+  const [translating, setTranslating] = useState<Set<string>>(new Set())
+  const [tFailed, setTFailed] = useState<Record<string, string>>({})
   const [notice, setNotice] = useState<{ id: string; text: string } | null>(null)
   const toggle = (id: string) =>
     setOpen((prev) => {
@@ -45,7 +49,7 @@ export default function AssetsView() {
       if (edHit && !editOpened.current) {
         editOpened.current = true
         setOpen((p) => new Set([...p, edHit.id]))
-        setEditing(edHit.id)
+        setEditing({ id: edHit.id })
       }
       // 캡처용: ?view=@태그:뷰 면 그 이미지를 크게 연다
       const want = new URLSearchParams(window.location.search).get('view')
@@ -64,6 +68,32 @@ export default function AssetsView() {
       if (c.type === 'assets') void load()
     })
   }, [ep]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 영문 프롬프트 → 한글 (펼친 카드 중 한글이 없거나 영문이 나중에 바뀐 칸). 여러 카드를 한 번에 묶어 AI 1회
+  const asked = useRef(new Set<string>())
+  async function translate(ids: string[], force?: KoPairEn[]) {
+    if (!ids.length) return
+    ids.forEach((id) => asked.current.add(id))
+    setTranslating((s) => new Set([...s, ...ids]))
+    setTFailed((f) => Object.fromEntries(Object.entries(f).filter(([k]) => !ids.includes(k))))
+    try {
+      await window.conti.api.assets.translateKo(ep, ids, force)
+    } catch (e) {
+      const msg = (e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
+      setTFailed((f) => ({ ...f, ...Object.fromEntries(ids.map((id) => [id, msg])) }))
+    } finally {
+      setTranslating((s) => new Set([...s].filter((x) => !ids.includes(x))))
+    }
+  }
+  useEffect(() => {
+    const need = assets.filter((a) => open.has(a.id) && !translating.has(a.id) && !tFailed[a.id] && KO_PAIRS.some((p) => koState(a, p) === 'enNewer'))
+    // 같은 영문으로 두 번 부르지 않게 — 영문이 바뀌면(키가 달라지면) 다시
+    const key = (a: Asset) => `${a.id}:${KO_PAIRS.map((p) => a[p.en] ?? '').join('|').length}:${KO_PAIRS.filter((p) => koState(a, p) === 'enNewer').map((p) => p.en).join(',')}`
+    const todo = need.filter((a) => !asked.current.has(key(a)))
+    if (!todo.length) return
+    todo.forEach((a) => asked.current.add(key(a)))
+    void translate(todo.map((a) => a.id))
+  }, [open, assets]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function runSetup() {
     setErr(null)
@@ -140,9 +170,9 @@ export default function AssetsView() {
                   return (
                   <div key={a.id} data-asset={a.tag} className="mb-2 rounded-md border border-line/70 bg-panel-2/60 p-2.5">
                     <button
-                      onClick={() => editing !== a.id && toggle(a.id)}
-                      className={`block w-full text-left ${editing === a.id ? 'cursor-default' : ''}`}
-                      title={editing === a.id ? undefined : expanded ? '접기' : '눌러서 설명 전체 보기'}
+                      onClick={() => editing?.id !== a.id && toggle(a.id)}
+                      className={`block w-full text-left ${editing?.id === a.id ? 'cursor-default' : ''}`}
+                      title={editing?.id === a.id ? undefined : expanded ? '접기' : '눌러서 설명 전체 보기'}
                     >
                       <div className="flex items-baseline justify-between">
                         <span className="flex items-center gap-1 font-mono text-[12px] text-accent">
@@ -154,46 +184,34 @@ export default function AssetsView() {
                         </span>
                       </div>
                       <div className="mt-0.5 text-[12.5px]">{a.nameKo}</div>
-                      {a.descriptionKo && editing !== a.id && (
-                        <div title={expanded ? undefined : a.descriptionKo} className={`mt-1 text-[11.5px] leading-relaxed text-muted ${expanded ? 'whitespace-pre-wrap text-ink/85' : 'line-clamp-2'}`}>
+                      {a.descriptionKo && !expanded && (
+                        <div title={a.descriptionKo} className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-muted">
                           {a.descriptionKo}
                         </div>
                       )}
                     </button>
-                    {expanded && editing === a.id && (
+                    {expanded && editing?.id === a.id && (
                       <AssetEditor
                         asset={a}
                         ep={ep}
+                        alignFields={editing?.align}
                         onClose={(text) => {
                           setEditing(null)
                           setNotice(text ? { id: a.id, text } : null)
                         }}
                       />
                     )}
-                    {expanded && editing !== a.id && (
-                      <dl className="mt-2 space-y-1.5 rounded border border-line/60 bg-bg/60 p-2 text-[11px]" data-testid="asset-detail">
-                        {(
-                          [
-                            ['외형 앵커 (EN) · 생성에 쓰임', a.anchorEn],
-                            ['카메라 앵커 (EN)', a.cameraAnchorEn],
-                            ['연기 마스터 프로필 (EN)', a.masterProfileEn],
-                            ['Voice (EN)', a.voiceEn],
-                          ] as const
-                        )
-                          .filter(([, v]) => !!v)
-                          .map(([k, v]) => (
-                            <div key={k}>
-                              <dt className="text-[10px] text-muted">{k}</dt>
-                              <dd className="whitespace-pre-wrap text-[11px] leading-relaxed text-ink/80">{v}</dd>
-                            </div>
-                          ))}
-                        {a.usedIn.length > 0 && (
-                          <div>
-                            <dt className="text-[10px] text-muted">나오는 씬</dt>
-                            <dd>{a.usedIn.join(', ')}</dd>
-                          </div>
-                        )}
-                      </dl>
+                    {expanded && editing?.id !== a.id && (
+                      <AssetKoView
+                        asset={a}
+                        translating={translating.has(a.id)}
+                        failed={tFailed[a.id]}
+                        onAlign={(fields) => {
+                          setNotice(null)
+                          setEditing({ id: a.id, align: fields })
+                        }}
+                        onRetranslate={(fields) => void translate([a.id], fields)}
+                      />
                     )}
                     {notice?.id === a.id && (
                       <div data-testid="asset-notice" className="mt-1.5 text-[10.5px] text-muted">
@@ -218,20 +236,14 @@ export default function AssetsView() {
                       })}
                     </div>
                     <div className="mt-1.5 flex items-center justify-between gap-2">
-                      {a.anchorEn && !expanded ? (
-                        <button onClick={() => toggle(a.id)} title={a.anchorEn} className="line-clamp-1 min-w-0 text-left font-mono text-[10px] text-muted/80 hover:text-muted">
-                          {a.anchorEn}
-                        </button>
-                      ) : (
-                        <span />
-                      )}
+                      <span />
                       <span className="flex shrink-0 gap-1.5">
-                        {expanded && editing !== a.id && (
+                        {expanded && editing?.id !== a.id && (
                           <button
                             data-testid="asset-edit"
                             onClick={() => {
                               setNotice(null)
-                              setEditing(a.id)
+                              setEditing({ id: a.id })
                             }}
                             className="flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[10.5px] text-muted hover:text-ink"
                             title="한글 설명·영문 프롬프트를 직접 고칩니다"

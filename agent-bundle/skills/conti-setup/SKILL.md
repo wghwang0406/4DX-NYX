@@ -57,12 +57,20 @@ project_update {"world":{"eraKo":"2020년대 현재","settingKo":"군산 외곽 
 - 실존 인물 이름·IP·브랜드 금지. **나이는 쓴다**(앵커 공식 요구).
 - 엑스트라(행인 다수)는 에셋으로 만들지 않고 샷의 `countsEn`에서 처리한다.
 
+### 한·영 짝 (모든 에셋)
+
+팀은 **한글을 읽고 고치고**, 생성에는 **영문만** 쓰인다. 그래서 영문 필드마다 같은 내용의 한글을 **같은 `assets_upsert` 호출에 함께** 준다
+(함께 주면 앱이 "서로 맞춰짐"으로 기록해 따로 번역하지 않는다). 짝: `anchorEn`↔`descriptionKo`, `cameraAnchorEn`↔`cameraAnchorKo`,
+`masterProfileEn`↔`masterProfileKo`, `voiceEn`↔`voiceKo`. 한글은 영문의 **충실한 번역** — 내용을 더하거나 빼지 않는다
+(영문에 붕대가 있으면 한글에도, 한글에 흐트러진 머리면 영문에도). 고정 꼬리 `100% matches the reference.`는 한글에서 `(레퍼런스와 100% 동일)`.
+
 ### 등장체 필드
 
-- `descriptionKo`: 한국어 외형·의상 2~4문장.
+- `descriptionKo`: `anchorEn`과 같은 내용의 한국어 외형·의상 2~4문장.
 - `anchorEn`: CINEDANCE 공식 한 문장 — `age + role/body type + current state + 시각 앵커 + 행동에 필요한 소품/신체 상태. 100% matches the reference.`
   예: `28yo lean female detective, shoulder-length black hair tied back in a low ponytail, worn navy field jacket, right hand bandaged. 100% matches the reference.`
 - `masterProfileEn`: Acting §6 규격. **150–220단어 영문 한 문단**, 블록 순서 고정(`Character acting as NAME.` → 체형·자세 → 심리 엔진 → Vocal profile → 틱+트리거 → Walking style → `However, when X, …` 크랙 절 필수 → 선택적 softening target). eye life 포함. **의상·카메라·색은 넣지 않는다.**
+- `masterProfileKo` / `voiceKo`: 위 두 영문의 한글 (같은 구조, 따옴표 유지).
 - `voiceEn`: 1–2문장 따옴표. `"A 28-year-old Korean woman from a port city. Low dry alto; clipped, even pace; flattens further under pressure."` 씬마다 바꾸지 않는다.
 - 동물·크리처도 마스터 프로필을 쓰되 종 특성으로 치환한다(Voice는 대사가 있을 때만).
 
@@ -70,6 +78,7 @@ project_update {"world":{"eraKo":"2020년대 현재","settingKo":"군산 외곽 
 
 - `descriptionKo`: 공간·재질·랜드마크·광원 방향.
 - `anchorEn`: 장소 정체성 + 주요 요소 + 광원/색온도 한 문장.
+- `cameraAnchorKo`: 카메라 앵커의 한글.
 - `cameraAnchorEn`: Lira 장소 템플릿의 카메라 앵커 — 단순한 표현으로(`high angle three-quarter wide shot, camera high above the room looking diagonally down at 45 degrees`). CCTV·fisheye 같은 용어 ✗. 인물 없음, 옵틱/DOF 언어 없음.
 
 ### 소품 필드
@@ -81,8 +90,8 @@ project_update {"world":{"eraKo":"2020년대 현재","settingKo":"군산 외곽 
 에셋마다 한 번씩:
 
 ```json
-assets_upsert {"ep":"EP01","asset":{"tag":"@해수","kind":"char","subkind":"human","state":"base","nameKo":"해수","descriptionKo":"…","anchorEn":"28yo lean female detective, … 100% matches the reference.","masterProfileEn":"Character acting as 해수. …","voiceEn":"\"A 28-year-old …\"","usedIn":["S41","S42"]}}
-assets_upsert {"ep":"EP01","asset":{"tag":"@loc_카페_night","kind":"loc","state":"night","nameKo":"카페","descriptionKo":"…","anchorEn":"…","cameraAnchorEn":"…","usedIn":["S41"]}}
+assets_upsert {"ep":"EP01","asset":{"tag":"@해수","kind":"char","subkind":"human","state":"base","nameKo":"해수","descriptionKo":"…","anchorEn":"28yo lean female detective, … 100% matches the reference.","masterProfileEn":"Character acting as 해수. …","masterProfileKo":"해수 역의 연기. …","voiceEn":"\"A 28-year-old …\"","voiceKo":"\"28세 …\"","usedIn":["S41","S42"]}}
+assets_upsert {"ep":"EP01","asset":{"tag":"@loc_카페_night","kind":"loc","state":"night","nameKo":"카페","descriptionKo":"…","anchorEn":"…","cameraAnchorEn":"…","cameraAnchorKo":"…","usedIn":["S41"]}}
 assets_upsert {"ep":"EP01","asset":{"tag":"@prop_권총","kind":"prop","state":"base","nameKo":"권총","descriptionKo":"…","anchorEn":"…","usedIn":["S41"]}}
 ```
 

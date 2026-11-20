@@ -784,20 +784,33 @@ afterAll(async () => {
   await rm(join(tmpdir(), 'conti-gen-never'), { force: true, recursive: true })
 })
 
-describe('anchorAlignPrompt (에셋 카드 한글대로 영문 맞추기)', () => {
-  it('puts the Korean as source of truth, the current English for comparison and the per-kind formula', async () => {
-    const { anchorAlignPrompt, ANCHOR_ALIGN_SCHEMA } = await import('./prompts/align')
-    const draft = { nameKo: '의현', descriptionKo: '20대 중반의 마른 청년. 흑발이 흐트러져 있다. 오른팔에 얼룩진 천 붕대.', anchorEn: '24yo lean young Korean man, short neat black hair.' }
-    const p = anchorAlignPrompt({ tag: '@의현', kind: 'char', subkind: 'human', state: 'base' }, draft)
-    expect(p).toContain('Korean description (source of truth):\n20대 중반의 마른 청년')
-    expect(p).toContain('Current English anchor:\n24yo lean young Korean man')
+describe('에셋 한·영 맞추기 프롬프트', () => {
+  it('koToEn: Korean is the source, current English kept for comparison, each field keeps its own format', async () => {
+    const { koToEnPrompt, promptInput, KO_TO_EN_SCHEMA } = await import('./prompts/align')
+    const p = koToEnPrompt({ tag: '@의현', kind: 'char', subkind: 'human', state: 'base', nameKo: '의현' }, [
+      { field: 'anchorEn', ko: '흑발이 흐트러져 있다. 오른팔에 붕대.', en: '24yo lean young Korean man, short neat black hair.' },
+      { field: 'voiceEn', ko: '"낮고 건조한 목소리"', en: '"Low dry voice."' },
+    ])
     expect(p).toContain('100% matches the reference.')
-    expect(p).toContain('character (human)')
-    const loc = anchorAlignPrompt({ tag: '@loc_도로_night', kind: 'loc', state: 'night' }, { ...draft, anchorEn: '' })
-    expect(loc).toContain('Places only')
+    expect(p).toContain('voiceEn: A voice line')
+    expect(p).not.toContain('masterProfileEn:')
+    expect(promptInput<Array<{ field: string; koEdited: string; enCurrent: string }>>(p)).toEqual([
+      { field: 'anchorEn', koEdited: '흑발이 흐트러져 있다. 오른팔에 붕대.', enCurrent: '24yo lean young Korean man, short neat black hair.' },
+      { field: 'voiceEn', koEdited: '"낮고 건조한 목소리"', enCurrent: '"Low dry voice."' },
+    ])
+    const loc = koToEnPrompt({ tag: '@loc_도로_night', kind: 'loc', state: 'night', nameKo: '도로' }, [{ field: 'cameraAnchorEn', ko: '높은 앵글', en: '' }])
     expect(loc).toContain('state "night"')
-    expect(loc).toContain('(empty)')
-    expect(loc).not.toContain('100% matches the reference.')
-    expect(ANCHOR_ALIGN_SCHEMA.required).toEqual(['anchorEn', 'changesKo'])
+    expect(loc).toContain('No CCTV or fisheye')
+    expect(KO_TO_EN_SCHEMA.required).toEqual(['fields'])
+  })
+
+  it('enToKo: batches several assets and fields with ids', async () => {
+    const { enToKoPrompt, promptInput } = await import('./prompts/align')
+    const p = enToKoPrompt([
+      { id: 'a1', tag: '@의현', field: 'masterProfileEn', en: 'Character acting as 의현. ...' },
+      { id: 'a2', tag: '@loc_도로', field: 'anchorEn', en: 'A night road.' },
+    ])
+    expect(p).toContain('(레퍼런스와 100% 동일)')
+    expect(promptInput<Array<{ id: string }>>(p)!.map((x: { id: string }) => x.id)).toEqual(['a1', 'a2'])
   })
 })

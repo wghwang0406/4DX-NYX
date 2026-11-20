@@ -1,5 +1,5 @@
 // 메인 ↔ 렌더러 계약. 양쪽이 이 타입만 본다.
-import type { Annotation, Asset, Project, Sequence, Shot } from '@conti/domain'
+import type { Annotation, Asset, KoPairEn, Project, Sequence, Shot } from '@conti/domain'
 import type { SceneChunk } from '@conti/screenplay'
 
 export interface ToolStatus {
@@ -84,8 +84,10 @@ export interface Api {
     list(ep: string): Promise<Asset[]>
     /** 카드에서 고친 칸만 저장. 외형이 바뀌면 그 에셋이 나오는 콘티 컷 수(staleShots)를 돌려준다 */
     update(ep: string, id: string, patch: AssetPatch): Promise<{ staleShots: number }>
-    /** [한글대로 영문 맞추기] — AI 1회 호출, 저장하지 않는다 */
-    alignAnchor(ep: string, id: string, draft: { nameKo: string; descriptionKo: string; anchorEn: string }): Promise<{ anchorEn: string; changesKo: string[] }>
+    /** 저장 전 — 고친 한글대로 영문을 다시 쓴다. AI 1회, 저장하지 않는다 */
+    koToEn(ep: string, id: string, items: Array<{ field: KoPairEn; ko: string; en: string }>): Promise<Array<{ field: KoPairEn; en: string; changesKo: string[] }>>
+    /** 영문이 새것인 칸을 한글로 옮겨 저장 (여러 에셋 한 번에). force = 영문 기준으로 한글 다시 쓰기 */
+    translateKo(ep: string, ids: string[], force?: KoPairEn[]): Promise<{ translated: number }>
   }
   md: {
     pending(): Promise<PendingChangeView[]>
@@ -98,6 +100,11 @@ export interface Api {
 }
 
 /** 에셋 카드에서 직접 고칠 수 있는 칸 (tag·kind 는 샷이 참조하므로 고정) */
-export type AssetPatch = Partial<Pick<Asset, 'nameKo' | 'descriptionKo' | 'anchorEn' | 'cameraAnchorEn' | 'masterProfileEn' | 'voiceEn'>>
+export type AssetPatch = Partial<
+  Pick<Asset, 'nameKo' | 'descriptionKo' | 'anchorEn' | 'cameraAnchorEn' | 'masterProfileEn' | 'voiceEn' | 'cameraAnchorKo' | 'masterProfileKo' | 'voiceKo'>
+> & {
+  /** 저장 후 이 칸들의 한·영을 맞춰진 것으로 기록 (한글대로 영문을 다시 쓴 칸) */
+  syncFields?: KoPairEn[]
+}
 
 export type StoreChange = { type: 'project' } | { type: 'sequence'; seq: string } | { type: 'assets'; ep: string } | { type: 'md-pending'; count: number }

@@ -82,7 +82,7 @@ function createWindow(): BrowserWindow {
     if (process.env.CONTI_LAB) query.lab = '1'
     if (process.env.CONTI_EXPAND) query.expand = '1' // 캡처용: 에셋 카드 모두 펼침
     if (process.env.CONTI_VIEW) query.view = process.env.CONTI_VIEW // 캡처용: 에셋 이미지 크게 보기 (@태그:뷰)
-    if (process.env.CONTI_E2E_ASSET_EDIT) Object.assign(query, { nav: 'Assets', edit: process.env.CONTI_E2E_ASSET_EDIT }) // 에셋 카드 수정 모드로
+    if (process.env.CONTI_E2E_ASSET_EDIT) Object.assign(query, { nav: 'Assets', expand: '1' }) // 에셋 카드 펼친 채로
     if (process.env.CONTI_VIDEO_UI) query.video = '1'
     if (process.env.CONTI_SETTINGS) query.settings = process.env.CONTI_SETTINGS
     void win.loadFile(join(__dirname, '../renderer/index.html'), Object.keys(query).length ? { query } : undefined)
@@ -181,7 +181,8 @@ function createWindow(): BrowserWindow {
       }, 2500)
     })
   } else if (process.env.CONTI_E2E_ASSET_EDIT) {
-    // 에셋 카드 직접 수정: 한글 설명 고치기 → [한글대로 영문 맞추기](CONTI_FAKE_ANALYSIS 면 고정 응답) → 바뀐 점 표시 → [저장] → 안내·파일 반영
+    // 에셋 카드 한글 우선: 펼치면 영문 → 한글 자동 번역 / [EN] 펼치기 / 어긋난 외형 → [한글대로 영문 맞추기] → 바뀐 점 → 저장
+    // / [수정]에서 Voice 한글 고치기 → 저장(영문 반영) → 바뀐 점 → 이대로 저장. CONTI_FAKE_ANALYSIS 면 AI 는 고정 응답
     win.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
         const out = process.env.CONTI_E2E_OUT ?? '/tmp/conti-asset-edit.json'
@@ -195,25 +196,46 @@ function createWindow(): BrowserWindow {
           }
           return false
         }
+        const snap = async (name: string) => shots && writeFile(join(shots, `${name}.png`), (await win.webContents.capturePage()).toPNG())
+        const type = (testid: string, v: string) =>
+          js(`(() => { const el = document.querySelector('[data-testid=${testid}]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, ${JSON.stringify(v)}); el.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        const text = (sel: string) => js(`document.querySelector(${JSON.stringify(sel)})?.textContent ?? null`)
+        const click = (testid: string) => js(`(() => { const b = document.querySelector('[data-testid=${testid}]'); if (!b) return false; b.click(); return true })()`)
         const r: Record<string, unknown> = {}
         try {
-          r.editorOpen = await until(`!!document.querySelector('[data-testid=asset-editor]')`, 6000)
-          r.before = await js(`({ ko: document.querySelector('[data-testid=edit-descriptionKo]')?.value, en: document.querySelector('[data-testid=edit-anchorEn]')?.value })`)
-          const ko = process.env.CONTI_E2E_ASSET_KO ?? '20대 후반 여성. 흐트러진 검은 단발, 낡은 네이비 야상, 오른팔에 얼룩진 천 붕대.'
-          // React 제어 textarea — 네이티브 setter 로 값을 넣고 input 이벤트
-          await js(`(() => { const el = document.querySelector('[data-testid=edit-descriptionKo]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, ${JSON.stringify(ko)}); el.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+          // 1) 펼친 카드: 마스터 프로필·Voice 한글이 자동으로 채워진다
+          r.translated = await until(`(document.querySelector('[data-testid=ko-voiceEn]')?.textContent ?? '').length > 2 && !document.querySelector('[data-testid=ko-voiceEn]').textContent.includes('옮기는 중')`, 120000)
+          r.view = { anchor: await text('[data-testid=ko-anchorEn]'), voice: await text('[data-testid=ko-voiceEn]'), profile: await text('[data-testid=ko-masterProfileEn]'), anchorOff: !!(await text('[data-testid=ko-off-anchorEn]')), enHidden: !(await js(`document.querySelector('[data-testid=asset-detail]').textContent.includes(${JSON.stringify('100% matches')})`)) }
+          await click('show-en-voiceEn')
           await wait(200)
-          r.warnKoOnly = await js(`document.querySelector('[data-testid=asset-editor]').textContent.includes('영문 앵커는 그대로입니다')`)
-          await js(`document.querySelector('[data-testid=align-anchor]').click()`)
-          r.aligned = await until(`!!document.querySelector('[data-testid=align-changes]')`, 120000)
-          r.afterAlign = await js(`({ en: document.querySelector('[data-testid=edit-anchorEn]').value, changes: [...document.querySelectorAll('[data-testid=align-changes] [data-change]')].map((d) => d.textContent) })`)
-          if (shots) await writeFile(join(shots, 'asset_edit_aligned.png'), (await win.webContents.capturePage()).toPNG())
+          r.enShown = await js(`document.querySelector('[data-pair=voiceEn]').textContent`)
+          await snap('asset_ko_view')
+          // 2) 어긋난 외형 → 한글대로 영문 맞추기 (수정 화면에서 바로 변환)
+          await click('align-anchorEn')
+          r.alignConverted = await until(`!!document.querySelector('[data-testid=changes-anchorEn] [data-change]')`, 120000)
+          r.alignChanges = await js(`[...document.querySelectorAll('[data-testid=changes-anchorEn] [data-change]')].map((d) => d.textContent)`)
+          await snap('asset_align_preview')
+          await click('asset-save')
+          r.alignSaved = await until(`!!document.querySelector('[data-testid=asset-notice]')`, 8000)
+          r.alignNotice = await text('[data-testid=asset-notice]')
+          r.anchorOffAfter = !!(await text('[data-testid=ko-off-anchorEn]'))
+          // 3) Voice 한글 고치기 → 저장(영문 반영) → 바뀐 점 → 이대로 저장
+          await click('asset-edit')
+          await until(`!!document.querySelector('[data-testid=edit-voiceKo]')`, 4000)
+          await type('edit-voiceKo', process.env.CONTI_E2E_ASSET_VOICE_KO ?? '"20대 후반 여성. 낮고 건조한 목소리, 화가 나면 오히려 느려진다."')
+          await wait(200)
+          r.statusBefore = await text('[data-testid=editor-status]')
+          await click('asset-save')
+          r.voiceConverted = await until(`!!document.querySelector('[data-testid=changes-voiceEn]')`, 120000)
+          r.voiceChanges = await js(`[...document.querySelectorAll('[data-testid=changes-voiceEn] [data-change]')].map((d) => d.textContent)`)
+          r.saveLabel = await text('[data-testid=asset-save]')
+          await snap('asset_voice_preview')
           if (process.env.CONTI_E2E_ASSET_SAVE !== '0') {
-            await js(`document.querySelector('[data-testid=asset-save]').click()`)
-            r.saved = await until(`!!document.querySelector('[data-testid=asset-notice]')`, 6000)
-            r.notice = await js(`document.querySelector('[data-testid=asset-notice]')?.textContent`)
-            r.cardEn = await js(`[...document.querySelectorAll('[data-testid=asset-detail] dd')].map((d) => d.textContent)[0]`)
-            if (shots) await writeFile(join(shots, 'asset_edit_saved.png'), (await win.webContents.capturePage()).toPNG())
+            await click('asset-save')
+            r.voiceSaved = await until(`!document.querySelector('[data-testid=asset-editor]')`, 8000)
+            await wait(300)
+            r.after = { voice: await text('[data-testid=ko-voiceEn]'), voiceState: await js(`document.querySelector('[data-pair=voiceEn]')?.dataset.state`), anchorState: await js(`document.querySelector('[data-pair=anchorEn]')?.dataset.state`) }
+            await snap('asset_saved')
           }
         } catch (e) {
           r.error = String((e as Error).stack ?? e)

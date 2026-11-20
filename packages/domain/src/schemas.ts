@@ -183,6 +183,12 @@ export const Asset = z.object({
   masterProfileEn: z.string().optional(),
   voiceEn: z.string().optional(),
   cameraAnchorEn: z.string().optional(),
+  // 영문 프롬프트를 읽기 쉽게 옮긴 한글 (외형의 한글은 descriptionKo). 생성에는 영문만 쓰인다
+  cameraAnchorKo: z.string().optional(),
+  masterProfileKo: z.string().optional(),
+  voiceKo: z.string().optional(),
+  // 한글·영문이 서로 맞춰진 때의 두 값 — 영문 필드명이 키. 지금 값과 비교해 어느 쪽이 새것인지 판정한다 (assetKo.ts)
+  koSync: z.record(z.string(), z.object({ en: z.string(), ko: z.string() })).optional(),
   views: z.record(z.string(), z.array(Version)).default({}),
   soul: z.object({ id: z.string(), model: z.string(), status: z.string() }).optional(),
   usedIn: z.array(SeqId).default([]),

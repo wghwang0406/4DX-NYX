@@ -167,6 +167,9 @@ describe('ProjectStore.patchAsset (에셋 카드 직접 수정)', () => {
     // 같은 값을 다시 줘도 stale 없음
     expect((await store.patchAsset('EP01', 'a1', { anchorEn: 'short neat black hair' })).staleShots).toBe(0)
 
+    // 한글 설명만 (영문 앵커가 있으면 생성엔 영문만 쓰임) → stale 없음
+    expect((await store.patchAsset('EP01', 'a1', { descriptionKo: '단정한 흑발의 청년' })).staleShots).toBe(0)
+
     // 외형 → 콘티 있는 컷만 stale
     const r2 = await store.patchAsset('EP01', 'a1', { descriptionKo: '흐트러진 흑발, 오른팔 붕대', anchorEn: 'messy black hair, stained cloth bandage on the right forearm' })
     expect(r2.staleShots).toBe(1)

@@ -12,7 +12,10 @@ import { renderCharacterMd } from './md/character'
  * ProjectStore — 프로젝트 상태의 단일 writer.
  * 진실은 .conti/*.json. md 파일(config.md, shotlist, Projectprompt 앵커 절)은 여기서 생성하는 뷰다.
  */
-/** 바뀌면 그 에셋이 나오는 콘티를 다시 그려야 하는 필드 (생성 프롬프트·레퍼런스에 들어가는 것) */
+/**
+ * 바뀌면 그 에셋이 나오는 콘티를 다시 그려야 하는 필드 (생성 프롬프트·레퍼런스에 들어가는 것).
+ * descriptionKo 는 영문 앵커가 비었을 때만 프롬프트에 들어가므로 그때만 센다 (patchAsset).
+ */
 export const VISUAL_ASSET_KEYS = ['anchorEn', 'cameraAnchorEn', 'descriptionKo', 'state', 'views'] as const
 
 export class ProjectStore {
@@ -181,7 +184,9 @@ export class ProjectStore {
     const given = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<Asset>
     const asset = Asset.parse({ ...prev, ...given, id: prev.id })
     const next = await this.upsertAsset(ep, asset)
-    const changed = VISUAL_ASSET_KEYS.some((k) => k in given && JSON.stringify(given[k]) !== JSON.stringify(prev[k]))
+    const changed = VISUAL_ASSET_KEYS.some(
+      (k) => k in given && JSON.stringify(given[k]) !== JSON.stringify(prev[k]) && (k !== 'descriptionKo' || !asset.anchorEn.trim()),
+    )
     const staleShots = changed ? await this.markStaleByAsset(asset.tag) : 0
     return { asset, staleShots, rev: next.rev }
   }

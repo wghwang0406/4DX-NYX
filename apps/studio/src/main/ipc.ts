@@ -4,7 +4,8 @@ import { readFile, copyFile, mkdir, readdir, stat, writeFile } from 'node:fs/pro
 import { randomUUID } from 'node:crypto'
 import { ProjectStore, MdWatcher, readText, writeAtomic, sha256 } from '@conti/core'
 import { splitScenes, textToLines, seqIdFromSceneNumber, extractPdfLines, type SourceLine } from '@conti/screenplay'
-import { safeName } from '@conti/domain'
+import { KO_PAIRS, safeName, withKoSync, type KoPairEn } from '@conti/domain'
+import type { KoToEnItem } from '@conti/genengine'
 import type { AssetPatch, ImportPick, ImportPreview, ImportSourceInfo, StoreChange } from '../shared/ipc'
 import { toolStatuses } from './diag'
 import { AgentHost } from './agent-host'
@@ -381,9 +382,21 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
   ipcMain.handle('assets:list', async (_e, ep: string) => (await requireStore().listAssets(ep)).assets)
   ipcMain.handle('assets:update', async (_e, ep: string, id: string, patch: AssetPatch) => {
     // 카드가 고칠 수 있는 칸만 통과 — tag·kind·views 는 여기서 못 바꾼다
-    const keys = ['nameKo', 'descriptionKo', 'anchorEn', 'cameraAnchorEn', 'masterProfileEn', 'voiceEn'] as const
-    const clean = Object.fromEntries(keys.filter((k) => typeof patch?.[k] === 'string').map((k) => [k, patch[k]!.trim()]))
-    const r = await requireStore().patchAsset(ep, id, clean)
+    const keys = ['nameKo', 'descriptionKo', 'anchorEn', 'cameraAnchorEn', 'masterProfileEn', 'voiceEn', 'cameraAnchorKo', 'masterProfileKo', 'voiceKo'] as const
+    const clean: Record<string, unknown> = Object.fromEntries(keys.filter((k) => typeof patch?.[k] === 'string').map((k) => [k, patch[k]!.trim()]))
+    const store = requireStore()
+    const cur = (await store.listAssets(ep)).assets.find((a) => a.id === id)
+    if (cur && patch?.syncFields?.length) {
+      // 한글대로 영문을 다시 쓴 칸 = 저장 값 그대로 서로 맞춰진 상태
+      const merged = { ...cur, ...clean } as typeof cur
+      let sync = cur.koSync
+      for (const f of patch.syncFields) {
+        const pair = KO_PAIRS.find((p) => p.en === f)
+        if (pair && merged[pair.en] && merged[pair.ko]) sync = withKoSync({ koSync: sync }, pair.en, { en: merged[pair.en]!, ko: merged[pair.ko]! })
+      }
+      clean.koSync = sync
+    }
+    const r = await store.patchAsset(ep, id, clean)
     return { staleShots: r.staleShots }
   })
 
@@ -392,7 +405,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
     return host
   }
   ipcMain.handle('agent:availability', () => requireHost().availability())
-  ipcMain.handle('assets:alignAnchor', (_e, ep: string, id: string, draft: { nameKo: string; descriptionKo: string; anchorEn: string }) => requireHost().alignAnchor(ep, id, draft))
+  ipcMain.handle('assets:koToEn', (_e, ep: string, id: string, items: KoToEnItem[]) => requireHost().koToEn(ep, id, items))
+  ipcMain.handle('assets:translateKo', (_e, ep: string, ids: string[], force?: KoPairEn[]) => requireHost().translateKo(ep, ids, force))
   ipcMain.handle('agent:threads', () => requireHost().listThreads())
   ipcMain.handle('agent:history', (_e, id: string) => requireHost().history(id))
   ipcMain.handle('agent:open', (_e, opts) => requireHost().open(opts))
