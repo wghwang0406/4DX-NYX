@@ -53,7 +53,7 @@ export const assetTools = [
   defineTool({
     name: 'assets_upsert',
     description:
-      '에셋을 만들거나 갱신한다. id(없으면 같은 tag)의 기존 에셋이 있으면 준 필드만 덮어쓰고, 없으면 새로 만든다. 저장 후 {ep}/character/Character.md 를 다시 쓴다. 외형(anchorEn 등)이 바뀌면 그 에셋이 나오는 콘티 샷이 stale 이 된다 (staleShots). 외형·카메라·연기 프로필·Voice 는 영문 필드(anchorEn·cameraAnchorEn·masterProfileEn·voiceEn)만 쓴다 — 한글(descriptionKo 등)은 앱이 그 영문을 번역해 만든다. 영문과 함께 준 한글은 버려진다.',
+      '에셋을 만들거나 갱신한다. id(없으면 같은 tag)의 기존 에셋이 있으면 준 필드만 덮어쓰고(usedIn 은 기존 씬과 합친다), 없으면 새로 만든다. 저장 후 {ep}/character/Character.md 를 다시 쓴다. 외형(anchorEn 등)이 바뀌면 그 에셋이 나오는 콘티 샷이 stale 이 된다 (staleShots). 외형·카메라·연기 프로필·Voice 는 영문 필드(anchorEn·cameraAnchorEn·masterProfileEn·voiceEn)만 쓴다 — 한글(descriptionKo 등)은 앱이 그 영문을 번역해 만든다. 영문과 함께 준 한글은 버려진다.',
     input: { ep: EpId, asset: AssetInput },
     handler: async ({ ep, asset }, { store }) => {
       const ea = await store.listAssets(ep)
@@ -64,6 +64,8 @@ export const assetTools = [
       if (existing) {
         // 준 필드만 덮어쓰고, 외형·뷰가 바뀌면 그 에셋이 나오는 콘티는 재생성 필요 (UI 카드 수정과 같은 규칙)
         const { id: _id, ...patch } = asset
+        // usedIn 은 합친다 — S41 추출이 S01 에서 뽑은 에셋을 다시 upsert 해도 S01 표시가 남게
+        if (patch.usedIn) patch.usedIn = [...new Set([...existing.usedIn, ...patch.usedIn])].sort()
         const r = await store.patchAsset(ep, existing.id, patch)
         return ok({ ok: true, id: r.asset.id, tag: r.asset.tag, rev: r.rev, created: false, staleShots: r.staleShots })
       }

@@ -82,6 +82,7 @@ function createWindow(): BrowserWindow {
     if (process.env.CONTI_LAB) query.lab = '1'
     if (process.env.CONTI_EXPAND) query.expand = '1' // 캡처용: 에셋 카드 모두 펼침
     if (process.env.CONTI_VIEW) query.view = process.env.CONTI_VIEW // 캡처용: 에셋 이미지 크게 보기 (@태그:뷰)
+    if (process.env.CONTI_E2E_ASSET_SEQS) Object.assign(query, { nav: 'Assets' })
     if (process.env.CONTI_E2E_ASSET_EDIT) Object.assign(query, { nav: 'Assets' }) // 에셋 화면 (카드는 접힌 채로 시작)
     if (process.env.CONTI_VIDEO_UI) query.video = '1'
     if (process.env.CONTI_SETTINGS) query.settings = process.env.CONTI_SETTINGS
@@ -258,6 +259,38 @@ function createWindow(): BrowserWindow {
           await snap('asset_saved')
         } catch (e) {
           r.error = String((e as Error).stack ?? e)
+        }
+        await writeFile(out, JSON.stringify(r, null, 2))
+        app.quit()
+      }, 2500)
+    })
+  } else if (process.env.CONTI_E2E_ASSET_SEQS) {
+    // 에셋 씬별 탭: 각 씬 탭의 카드 태그 / [전체] / 헤더 씬과 탭이 같이 움직이는지 / 겹치는 에셋 칩. 결과는 CONTI_E2E_OUT
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(async () => {
+        const out = process.env.CONTI_E2E_OUT ?? '/tmp/conti-asset-seqs.json'
+        const shots = process.env.CONTI_E2E_SHOTDIR
+        const js = (c: string) => win.webContents.executeJavaScript(c)
+        const wait = (ms: number) => new Promise((res) => setTimeout(res, ms))
+        const r: Record<string, unknown> = {}
+        const tags = () => js(`[...document.querySelectorAll('[data-asset]')].map(e => e.dataset.asset)`)
+        const pressed = () => js(`document.querySelector('[data-seq-tab][aria-pressed=true]')?.dataset.seqTab ?? null`)
+        const header = () => js(`document.querySelector('header')?.textContent.slice(0, 60) ?? ''`)
+        try {
+          for (let i = 0; i < 40 && !(await js(`!!document.querySelector('[data-seq-tab]')`)); i++) await wait(250)
+          await wait(500)
+          r.tabs = await js(`[...document.querySelectorAll('[data-seq-tab]')].map(b => b.textContent.trim())`)
+          r.initial = { pressed: await pressed(), header: await header() }
+          const seqTabs: string[] = await js(`[...document.querySelectorAll('[data-seq-tab]')].map(b => b.dataset.seqTab)`)
+          r.bySeq = {}
+          for (const t of seqTabs) {
+            await js(`document.querySelector('[data-seq-tab="${t}"]').click()`)
+            await wait(400)
+            ;(r.bySeq as Record<string, unknown>)[t] = { tags: await tags(), pressed: await pressed(), header: await header(), shared: await js(`[...document.querySelectorAll('[data-shared]')].map(e => e.dataset.shared + '=' + e.textContent)`) }
+            if (shots) await writeFile(join(shots, `seq-${t}.png`), (await win.webContents.capturePage()).toPNG())
+          }
+        } catch (e) {
+          r.error = String(e)
         }
         await writeFile(out, JSON.stringify(r, null, 2))
         app.quit()

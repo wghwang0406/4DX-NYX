@@ -278,6 +278,13 @@ describe('assets', () => {
     a = json(await call('assets_get', { ep: 'EP02', idOrTag: '@민' }))
     expect(st(a)).toMatchObject({ masterProfileEn: 'koNewer' })
   })
+
+  it('usedIn merges: extracting S41 after S01 keeps the S01 mark', async () => {
+    await call('assets_upsert', { ep: 'EP03', asset: { tag: '@해수', kind: 'char', nameKo: '해수', anchorEn: '28yo woman.', usedIn: ['S41'] } })
+    await call('assets_upsert', { ep: 'EP03', asset: { tag: '@해수', kind: 'char', nameKo: '해수', usedIn: ['S01', 'S41'] } })
+    await call('assets_upsert', { ep: 'EP03', asset: { tag: '@해수', kind: 'char', nameKo: '해수', usedIn: ['S42'] } })
+    expect(json(await call('assets_get', { ep: 'EP03', idOrTag: '@해수' })).usedIn).toEqual(['S01', 'S41', 'S42'])
+  })
 })
 
 describe('spec / image / ui', () => {

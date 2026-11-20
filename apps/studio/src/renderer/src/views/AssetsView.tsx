@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Box, User, MapPin, Package, Play, Images, ChevronDown, ChevronRight, ChevronsUpDown } from 'lucide-react'
-import { ASSET_VIEWS, KO_PAIRS, koState, type Asset, type KoPairEn } from '@conti/domain'
+import { ASSET_VIEWS, KO_PAIRS, assetSeqs, koState, type Asset, type KoPairEn } from '@conti/domain'
 import { useProject } from '../state/project'
 import { fileUrl } from '../data/adapters'
 import AssetViewer from '../components/AssetViewer'
@@ -11,11 +11,17 @@ const KIND_LABEL = { char: '등장체', loc: '배경', prop: '소품' } as const
 const KIND_ICON = { char: User, loc: MapPin, prop: Package } as const
 const VIEW_LABEL: Record<string, string> = { sheet: '시트', front: '정면', back: '후면', face: '얼굴', wide: '와이드', '34': '3/4', top: '탑', detail: '디테일' }
 
-/** 에셋 사전 — AI(conti-setup)가 추출한 등장체/배경/소품 + 시트·뷰 이미지. 생성은 승인 카드를 거친다. */
+/**
+ * 에셋 사전 — AI(conti-setup)가 추출한 등장체/배경/소품 + 시트·뷰 이미지. 생성은 승인 카드를 거친다.
+ * 에셋은 에피소드 단위로 저장되고, 화면은 씬별 탭으로 나눠 보여 준다 (나오는 씬 = usedIn ∪ 샷 태그, assetSeqs).
+ * 씬 탭은 헤더의 현재 씬과 같이 움직이고, [전체]는 에피소드 전체.
+ */
 export default function AssetsView() {
-  const { sequences, seq } = useProject()
+  const { sequences, seq, setSeq } = useProject()
   const ep = sequences.find((s) => s.seq === seq)?.ep ?? sequences[0]?.ep ?? 'EP01'
-  const [assets, setAssets] = useState<Asset[]>([])
+  const epSeqs = sequences.filter((s) => s.ep === ep)
+  const [all, setAll] = useState(false)
+  const [allAssets, setAssets] = useState<Asset[]>([])
   const [running, setRunning] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   // 크게 보기 (썸네일 클릭) — 다시 생성은 뷰어 안의 버튼으로만
@@ -84,17 +90,27 @@ export default function AssetsView() {
     const todo = (a: Asset) => KO_PAIRS.filter((p) => ['enNewer', 'koNewer', 'unknown'].includes(koState(a, p)))
     // 같은 내용으로 두 번 부르지 않게 — 값이 바뀌면(키가 달라지면) 다시
     const key = (a: Asset) => `${a.id}:${todo(a).map((p) => `${p.en}=${(a[p.en] ?? '').length}/${(a[p.ko] ?? '').length}`).join(',')}`
-    const need = assets.filter((a) => !translating.has(a.id) && !tFailed[a.id] && todo(a).length && !asked.current.has(key(a)))
+    const need = allAssets.filter((a) => !translating.has(a.id) && !tFailed[a.id] && todo(a).length && !asked.current.has(key(a)))
     if (!need.length) return
     need.forEach((a) => asked.current.add(key(a)))
     void reconcile(need.map((a) => a.id))
-  }, [assets]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allAssets]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 씬별 보기 — 나오는 씬이 없는 에셋(손으로 만든 것 등)은 잃어버리지 않게 모든 씬 탭에 "씬 미지정"으로 보인다
+  const seqsOf = new Map(allAssets.map((a) => [a.id, assetSeqs(a, epSeqs)]))
+  const inSeq = (a: Asset, s: string) => {
+    const xs = seqsOf.get(a.id) ?? []
+    return !xs.length || xs.includes(s)
+  }
+  const scoped = all || !seq ? null : seq
+  const assets = scoped ? allAssets.filter((a) => inSeq(a, scoped)) : allAssets
+  const allOpen = assets.length > 0 && assets.every((a) => open.has(a.id))
 
   async function runSetup() {
     setErr(null)
     setRunning(true)
     try {
-      await window.conti.agent.runTask('setup', seq ?? undefined)
+      await window.conti.agent.runTask('setup', scoped ?? undefined)
     } catch (e) {
       setErr((e as Error).message)
     } finally {
@@ -119,17 +135,20 @@ export default function AssetsView() {
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-3 pt-0">
       <section className="flex items-center justify-between rounded-lg border border-line bg-panel p-4">
         <div>
-          <div className="text-[14px] font-semibold">에셋 — {ep}</div>
+          <div className="text-[14px] font-semibold">
+            에셋 — {ep}
+            {scoped ? ` · ${scoped}` : ' · 전체'}
+          </div>
           <div className="text-[12px] text-muted">시나리오에서 등장체·배경·소품을 뽑아 사전을 만들고, 승인하면 시트·뷰 이미지를 생성합니다. 콘티는 이 시트를 레퍼런스로 그립니다.</div>
         </div>
         <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
           <button
             data-testid="assets-expand-all"
             disabled={!assets.length}
-            onClick={() => setOpen(open.size >= assets.length ? new Set() : new Set(assets.map((a) => a.id)))}
+            onClick={() => setOpen(allOpen ? new Set() : new Set(assets.map((a) => a.id)))}
             className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[12.5px] hover:bg-panel-2 disabled:opacity-50"
           >
-            <ChevronsUpDown size={14} /> {open.size >= assets.length && assets.length ? '모두 접기' : '모두 펼치기'}
+            <ChevronsUpDown size={14} /> {allOpen ? '모두 접기' : '모두 펼치기'}
           </button>
           <button
             disabled={!missing.length}
@@ -144,6 +163,36 @@ export default function AssetsView() {
           </button>
         </div>
       </section>
+      {epSeqs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="asset-seq-tabs">
+          {epSeqs.map((s) => {
+            const on = scoped === s.seq
+            return (
+              <button
+                key={s.seq}
+                data-seq-tab={s.seq}
+                aria-pressed={on}
+                onClick={() => {
+                  setAll(false)
+                  setSeq(s.seq)
+                }}
+                title={s.headingKo}
+                className={`rounded-md border px-2.5 py-1 font-mono text-[12px] ${on ? 'border-accent bg-accent/15 text-ink' : 'border-line text-muted hover:text-ink'}`}
+              >
+                {s.seq} <span className="text-[10.5px] opacity-70">{allAssets.filter((a) => inSeq(a, s.seq)).length}</span>
+              </button>
+            )
+          })}
+          <button
+            data-seq-tab="all"
+            aria-pressed={!scoped}
+            onClick={() => setAll(true)}
+            className={`rounded-md border px-2.5 py-1 text-[12px] ${!scoped ? 'border-accent bg-accent/15 text-ink' : 'border-line text-muted hover:text-ink'}`}
+          >
+            전체 <span className="text-[10.5px] opacity-70">{allAssets.length}</span>
+          </button>
+        </div>
+      )}
       {err && <div className="rounded-md border border-red-900/60 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">{err}</div>}
 
       <div className="grid min-h-0 flex-1 grid-cols-3 gap-3">
@@ -170,8 +219,18 @@ export default function AssetsView() {
                           {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                           {a.tag}
                         </span>
-                        <span className="text-[10.5px] text-muted">
+                        <span className="flex items-center gap-1.5 text-[10.5px] text-muted">
                           {a.subkind ?? ''} {a.state !== 'base' ? `· ${a.state}` : ''}
+                          {(seqsOf.get(a.id)?.length ?? 0) > 1 && (
+                            <span data-shared={a.tag} className="rounded border border-line px-1 font-mono" title="여러 씬에 나오는 에셋">
+                              {seqsOf.get(a.id)!.join('·')}
+                            </span>
+                          )}
+                          {!seqsOf.get(a.id)?.length && (
+                            <span className="rounded border border-dashed border-line px-1" title="어느 씬에 나오는지 기록이 없어 모든 씬에 보입니다">
+                              씬 미지정
+                            </span>
+                          )}
                         </span>
                       </div>
                       {!expanded && <div className="mt-0.5 text-[12.5px]">{a.nameKo}</div>}
@@ -188,6 +247,7 @@ export default function AssetsView() {
                         translating={translating.has(a.id)}
                         failed={tFailed[a.id]}
                         autoNotes={autoNotes[a.id]}
+                        seqs={seqsOf.get(a.id) ?? []}
                         onRetry={() => void reconcile([a.id])}
                         onDismissAuto={(f) => setAutoNotes((n) => ({ ...n, [a.id]: Object.fromEntries(Object.entries(n[a.id] ?? {}).filter(([k]) => k !== f)) }))}
                       />
@@ -225,10 +285,10 @@ export default function AssetsView() {
           )
         })}
       </div>
-      {viewer && assets.find((x) => x.id === viewer.id) && (
+      {viewer && allAssets.find((x) => x.id === viewer.id) && (
         <AssetViewer
           key={viewer.id}
-          asset={assets.find((x) => x.id === viewer.id)!}
+          asset={allAssets.find((x) => x.id === viewer.id)!}
           view={viewer.view}
           onClose={() => setViewer(null)}
           onRegenerate={(views) => {

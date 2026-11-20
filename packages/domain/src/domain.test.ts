@@ -69,3 +69,20 @@ describe('asset Korean/English pairs (koState)', () => {
     expect(koState(d, anchor)).toBe('unknown')
   })
 })
+
+describe('asset scenes (assetSeqs)', () => {
+  it('joins usedIn with the tags shots reference', async () => {
+    const { assetSeqs } = await import('./assetSeqs')
+    const shot = (o: { characters?: string[]; location?: string; props?: string[] }) => ({ characters: [], props: [], ...o })
+    const seqs = [
+      { seq: 'S01', ep: 'EP01', shots: [] },
+      { seq: 'S41', ep: 'EP01', shots: [shot({ characters: ['@해수'], location: '@loc_산길', props: ['@prop_권총'] })] },
+      { seq: 'S42', ep: 'EP01', shots: [shot({ characters: ['@의현'] })] },
+    ]
+    expect(assetSeqs({ tag: '@여인', usedIn: ['S01'] }, seqs)).toEqual(['S01']) // 추출 기록만
+    expect(assetSeqs({ tag: '@해수', usedIn: [] }, seqs)).toEqual(['S41']) // 샷 태그만
+    expect(assetSeqs({ tag: '@loc_산길', usedIn: ['S01'] }, seqs)).toEqual(['S01', 'S41']) // 둘 다 → 겹치는 에셋
+    expect(assetSeqs({ tag: '@prop_권총', usedIn: [] }, seqs)).toEqual(['S41'])
+    expect(assetSeqs({ tag: '@없음', usedIn: [] }, seqs)).toEqual([]) // 씬 미지정
+  })
+})

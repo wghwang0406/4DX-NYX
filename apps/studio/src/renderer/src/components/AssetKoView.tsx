@@ -56,9 +56,12 @@ export default function AssetKoView({
   autoNotes,
   onRetry,
   onDismissAuto,
+  seqs,
 }: {
   asset: Asset
   ep: string
+  /** 이 에셋이 나오는 씬 (usedIn ∪ 샷 태그, assetSeqs) */
+  seqs: string[]
   /** 자동 맞춤 진행 중 */
   translating: boolean
   failed?: string
@@ -239,12 +242,10 @@ export default function AssetKoView({
             )}
           </div>
         )}
-        {asset.usedIn.length > 0 && (
-          <div>
-            <dt className="text-[10px] text-muted">나오는 씬</dt>
-            <dd>{asset.usedIn.join(', ')}</dd>
-          </div>
-        )}
+        <div>
+          <dt className="text-[10px] text-muted">나오는 씬</dt>
+          <dd>{seqs.length ? seqs.join(', ') : '씬 미지정'}</dd>
+        </div>
       </dl>
       <div className="text-[10px] text-muted/70">글자를 누르면 바로 고칩니다 · 한글을 고치면 생성용 영문도 맞춰집니다</div>
     </div>
