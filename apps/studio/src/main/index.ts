@@ -82,7 +82,7 @@ function createWindow(): BrowserWindow {
     if (process.env.CONTI_LAB) query.lab = '1'
     if (process.env.CONTI_EXPAND) query.expand = '1' // 캡처용: 에셋 카드 모두 펼침
     if (process.env.CONTI_VIEW) query.view = process.env.CONTI_VIEW // 캡처용: 에셋 이미지 크게 보기 (@태그:뷰)
-    if (process.env.CONTI_E2E_ASSET_EDIT) Object.assign(query, { nav: 'Assets', expand: '1' }) // 에셋 카드 펼친 채로
+    if (process.env.CONTI_E2E_ASSET_EDIT) Object.assign(query, { nav: 'Assets' }) // 에셋 화면 (카드는 접힌 채로 시작)
     if (process.env.CONTI_VIDEO_UI) query.video = '1'
     if (process.env.CONTI_SETTINGS) query.settings = process.env.CONTI_SETTINGS
     void win.loadFile(join(__dirname, '../renderer/index.html'), Object.keys(query).length ? { query } : undefined)
@@ -203,20 +203,38 @@ function createWindow(): BrowserWindow {
         const click = (testid: string) => js(`(() => { const b = document.querySelector('[data-testid=${testid}]'); if (!b) return false; b.click(); return true })()`)
         const r: Record<string, unknown> = {}
         const state = (f: string) => js(`document.querySelector('[data-pair=${f}]')?.dataset.state ?? null`)
+        const onDisk = async () => {
+          const root = ipcHandle!.currentRoot()!
+          const { readFile } = await import('node:fs/promises')
+          return JSON.parse(await readFile(join(root, '.conti/episodes/EP01/assets.json'), 'utf8')).assets[0] as Record<string, unknown>
+        }
         try {
-          // 1) 펼치면: 한글 없는 칸은 번역, 맞춰진 기록이 없는 예전 칸(외형)은 한·영 비교 → 실제로 다를 때만 다른 점 표시
-          r.translated = await until(`(document.querySelector('[data-testid=text-voiceEn]')?.textContent ?? '').length > 2 && !document.querySelector('[data-testid=text-voiceEn]').textContent.includes('옮기는 중') && document.querySelector('[data-pair=anchorEn]')?.dataset.state !== 'unknown'`, 120000)
-          r.view = { voice: await text('[data-testid=text-voiceEn]'), profile: (await text('[data-testid=text-masterProfileEn]'))?.slice(0, 80), anchorState: await state('anchorEn'), anchorDiff: await js(`[...document.querySelectorAll('[data-testid=ko-off-anchorEn] [data-diff]')].map((d) => d.textContent)`) }
+          // 1) 화면만 열어도(카드 접힘) 자동 맞춤: 예전 외형은 합쳐서 하나로, 한글 없는 Voice·프로필은 번역
+          for (let t = 0; t < 120000; t += 500) {
+            const a = (await onDisk()) as { koSync?: Record<string, unknown> }
+            if (a.koSync && ['anchorEn', 'voiceEn', 'masterProfileEn'].every((k) => a.koSync![k])) break
+            await wait(500)
+          }
+          const a0 = await onDisk()
+          r.reconciledCollapsed = { anchorEn: String(a0.anchorEn).slice(0, 70), descriptionKo: String(a0.descriptionKo).slice(0, 70), voiceKo: String(a0.voiceKo).slice(0, 50), synced: Object.keys((a0.koSync as object) ?? {}) }
+          await js(`document.querySelector('[data-asset] button').click()`)
+          await until(`!!document.querySelector('[data-testid=asset-detail]')`, 3000)
+          await wait(300)
+          r.view = {
+            anchorNote: await text('[data-testid=note-anchorEn]'),
+            warnings: await js(`document.querySelectorAll('[data-testid^=ko-off]').length`),
+            states: await js(`[...document.querySelectorAll('[data-pair]')].map((d) => d.dataset.pair + '=' + d.dataset.state)`),
+          }
           await snap('asset_ko_view')
           if (process.env.CONTI_E2E_ASSET_VIEWONLY) throw new Error('view-only')
-          // 2) KR ↔ EN 토글: 그 칸 글자가 바뀌고 버튼 글자도 바뀐다
+          // 2) KR ↔ EN 토글
           await click('lang-voiceEn')
           await wait(150)
-          r.toggleEn = { button: await text('[data-testid=lang-voiceEn]'), lang: await js(`document.querySelector('[data-testid=text-voiceEn]').dataset.lang`), text: await text('[data-testid=text-voiceEn]') }
+          r.toggleEn = { button: await text('[data-testid=lang-voiceEn]'), lang: await js(`document.querySelector('[data-testid=text-voiceEn]').dataset.lang`) }
           await click('lang-voiceEn')
           await wait(150)
           r.toggleKo = { button: await text('[data-testid=lang-voiceEn]'), lang: await js(`document.querySelector('[data-testid=text-voiceEn]').dataset.lang`) }
-          // 3) 글자를 눌러 바로 고치기 (한글) → 바깥 클릭 → 영문이 다시 쓰이고 바뀐 점
+          // 3) 글자를 눌러 한글 고치기 → 영문 자동 → 바뀐 점
           await click('text-voiceEn')
           await until(`!!document.querySelector('[data-testid=inline-voiceKo]')`, 3000)
           await type('inline-voiceKo', process.env.CONTI_E2E_ASSET_VOICE_KO ?? '"20대 후반 여성. 낮고 건조한 목소리, 화가 나면 오히려 느려진다."')
@@ -225,19 +243,12 @@ function createWindow(): BrowserWindow {
           r.voiceNote = await text('[data-testid=note-voiceEn]')
           r.voiceState = await state('voiceEn')
           await snap('asset_voice_edited')
-          // 4) 실제로 다른 외형 → 한글 기준으로 영문 고치기
-          if (await click('fix-en-anchorEn')) {
-            r.anchorFixed = await until(`!!document.querySelector('[data-testid=note-anchorEn]')`, 120000)
-            r.anchorNote = await text('[data-testid=note-anchorEn]')
-            r.anchorStateAfter = await state('anchorEn')
-          }
-          // 5) Voice 되돌리기
-          const before = r.voiceNote
-          await click('undo-voiceEn')
-          r.undone = await until(`!document.querySelector('[data-testid=note-voiceEn]')`, 6000)
-          await wait(300)
-          r.voiceAfterUndo = { text: await text('[data-testid=text-voiceEn]'), state: await state('voiceEn'), hadNote: !!before }
-          // 6) 이름 바로 고치기
+          // 4) 자동 맞춤 되돌리기 → 예전 영문 + 그 영문에서 다시 옮긴 한글 (둘이 갈리지 않음)
+          await click('undo-anchorEn')
+          r.anchorUndone = await until(`!document.querySelector('[data-testid=note-anchorEn]') && document.querySelector('[data-pair=anchorEn]')?.dataset.state === 'synced'`, 60000)
+          const a1 = await onDisk()
+          r.afterUndo = { anchorEn: String(a1.anchorEn).slice(0, 70), descriptionKo: String(a1.descriptionKo).slice(0, 70) }
+          // 5) 이름 바로 고치기
           await click('name-text')
           await until(`!!document.querySelector('[data-testid=inline-nameKo]')`, 3000)
           await type('inline-nameKo', '해수(형사)')

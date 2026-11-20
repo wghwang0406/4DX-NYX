@@ -38,7 +38,7 @@ const api: Api = {
     list: (ep) => invoke('assets:list', ep),
     update: (ep, id, patch) => invoke('assets:update', ep, id, patch),
     koToEn: (ep, id, items) => invoke('assets:koToEn', ep, id, items),
-    translateKo: (ep, ids, force) => invoke('assets:translateKo', ep, ids, force),
+    reconcileKo: (ep, ids, force) => invoke('assets:reconcileKo', ep, ids, force),
   },
   md: {
     pending: () => invoke('md:pending'),

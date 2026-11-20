@@ -411,7 +411,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
   }
   ipcMain.handle('agent:availability', () => requireHost().availability())
   ipcMain.handle('assets:koToEn', (_e, ep: string, id: string, items: KoToEnItem[]) => requireHost().koToEn(ep, id, items))
-  ipcMain.handle('assets:translateKo', (_e, ep: string, ids: string[], force?: KoPairEn[]) => requireHost().translateKo(ep, ids, force))
+  ipcMain.handle('assets:reconcileKo', (_e, ep: string, ids: string[], force?: KoPairEn[]) => requireHost().reconcileKo(ep, ids, force))
   ipcMain.handle('agent:threads', () => requireHost().listThreads())
   ipcMain.handle('agent:history', (_e, id: string) => requireHost().history(id))
   ipcMain.handle('agent:open', (_e, opts) => requireHost().open(opts))

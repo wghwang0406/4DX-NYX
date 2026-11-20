@@ -188,7 +188,7 @@ export const Asset = z.object({
   masterProfileKo: z.string().optional(),
   voiceKo: z.string().optional(),
   // 한글·영문이 서로 맞춰진 때의 두 값 — 영문 필드명이 키. 지금 값과 비교해 어느 쪽이 새것인지 판정한다 (assetKo.ts)
-  // diffKo 가 있으면 "비교해 봤더니 이만큼 다르다" (AI 비교 결과, 사람이 맞출 때까지 표시)
+  // (diffKo 는 예전 비교 기록 — 이제 쓰지 않고, 있으면 unknown 으로 보고 다시 맞춘다)
   koSync: z.record(z.string(), z.object({ en: z.string(), ko: z.string(), diffKo: z.array(z.string()).optional() })).optional(),
   views: z.record(z.string(), z.array(Version)).default({}),
   soul: z.object({ id: z.string(), model: z.string(), status: z.string() }).optional(),

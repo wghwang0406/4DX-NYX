@@ -26,16 +26,23 @@ export const EN_TO_KO_SCHEMA = {
       type: 'array',
       items: { type: 'object', properties: { id: { type: 'string' }, field: { type: 'string' }, ko: { type: 'string' } }, required: ['id', 'field', 'ko'] },
     },
-    checks: {
+  },
+  required: ['items'],
+} as const
+
+export const MERGE_KO_EN_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
       type: 'array',
       items: {
         type: 'object',
-        properties: { id: { type: 'string' }, field: { type: 'string' }, same: { type: 'boolean' }, diffKo: { type: 'array', items: { type: 'string' } } },
-        required: ['id', 'field', 'same', 'diffKo'],
+        properties: { id: { type: 'string' }, field: { type: 'string' }, en: { type: 'string' }, ko: { type: 'string' }, changesKo: { type: 'array', items: { type: 'string' } } },
+        required: ['id', 'field', 'en', 'ko', 'changesKo'],
       },
     },
   },
-  required: ['items', 'checks'],
+  required: ['items'],
 } as const
 
 const ANCHOR_FORMAT: Record<Asset['kind'], string> = {
@@ -97,38 +104,51 @@ export interface EnToKoItem {
   en: string
 }
 
-export interface KoCheckItem {
+/** 영문 프롬프트를 사람이 읽고 고칠 한글로 — 여러 에셋·필드를 한 번에 */
+export function enToKoPrompt(items: EnToKoItem[]): string {
+  return [
+    'Translate each English film-production prompt below into natural Korean that the team will read and edit.',
+    '- Faithful: the same facts in the same order, nothing added or dropped. Plain Korean production wording, not a word-for-word gloss.',
+    '- Keep the structure: an acting master profile stays one paragraph in the same block order; a voice line keeps its double quotes.',
+    '- The fixed tail "100% matches the reference." becomes "(레퍼런스와 100% 동일)".',
+    '- Keep @tags and proper nouns as they are.',
+    'Return one entry per input item with the same id and field.',
+    '<<<INPUT',
+    JSON.stringify(items.map((it) => ({ id: it.id, field: it.field, tag: it.tag, en: it.en.trim() })), null, 1),
+    'INPUT>>>',
+  ].join('\n')
+}
+
+export interface MergeItem {
   id: string
   tag: string
+  kind: Asset['kind']
   field: KoPairEn
   en: string
   ko: string
 }
 
 /**
- * 영문 프롬프트를 사람이 읽고 고칠 한글로 — 여러 에셋·필드를 한 번에.
- * checks: 한글·영문이 둘 다 있는데 맞춰진 기록이 없는 칸 (예전 에셋) — 같은 내용인지 비교만 한다.
+ * 예전 에셋 — 한글과 영문을 따로 써서 내용이 갈렸을 수 있는 칸을 하나로 합친다.
+ * 영문 = 두 쪽 사실을 합친 문장(모순은 한글 우선), 한글 = 그 최종 영문의 충실한 번역. 그 뒤로는 둘이 같은 내용이다.
  */
-export function enToKoPrompt(items: EnToKoItem[], checks: KoCheckItem[] = []): string {
+export function mergeKoEnPrompt(items: MergeItem[]): string {
+  const fields = [...new Set(items.map((it) => `${it.field}|${it.kind}`))]
   return [
-    'Part 1 — "translate": translate each English film-production prompt into natural Korean that the team will read and edit.',
-    '- Faithful: the same facts in the same order, nothing added or dropped. Plain Korean production wording, not a word-for-word gloss.',
-    '- Keep the structure: an acting master profile stays one paragraph in the same block order; a voice line keeps its double quotes.',
-    '- The fixed tail "100% matches the reference." becomes "(레퍼런스와 100% 동일)".',
-    '- Keep @tags and proper nouns as they are.',
-    'Return one "items" entry per translate item with the same id and field.',
+    'Each item is one field of a film production asset whose Korean and English were written separately and may disagree. Make them one.',
+    'The English is what is sent to the image and video models; the Korean is what the team reads. After this they must say exactly the same thing.',
     '',
-    'Part 2 — "compare": for each compare item, decide whether the Korean and the English would make the model produce the same thing.',
-    'A difference is ONLY (a) a contradiction (neat vs messy hair, navy vs black jacket, day vs night), or (b) a concrete visible or audible element present on one side and missing on the other (a wound, bandage, prop, garment, hair state, colour, landmark, light source, a vocal trait, an acting beat).',
-    'NOT differences: approximations ("20대 후반" vs "28yo"), general traits one side leaves out (build words like lean, nationality, role), wording, order, format, the fixed tail "100% matches the reference.".',
-    'same = true when there is no difference by that rule. Otherwise diffKo = short Korean lines naming each one, e.g. "영문엔 오른팔 붕대가 없음", "머리: 한글은 흐트러짐 / 영문은 단정함". Return one "checks" entry per compare item.',
-    'Either list may be empty.',
+    '1. en: rewrite the English to include every fact from BOTH sides. Where they contradict, the Korean wins. Invent nothing. Change as little of the current English as possible.',
+    '   Positive phrasing, natural prose, no keyword stacks, no real person names or brands; keep ages. Each field keeps its format:',
+    ...fields.map((f) => {
+      const [field, kind] = f.split('|') as [KoPairEn, Asset['kind']]
+      return `   - ${field} (${kind}): ${fieldFormat(field, kind)}`
+    }),
+    '2. ko: a faithful natural-Korean translation of YOUR final English (same facts, same order; "100% matches the reference." → "(레퍼런스와 100% 동일)").',
+    '3. changesKo: short Korean lines naming only what you changed in the ENGLISH ("… 추가", "항목: 이전 → 이후"); empty array if the English did not need to change.',
+    'Return one entry per item with the same id and field.',
     '<<<INPUT',
-    JSON.stringify(
-      { translate: items.map((it) => ({ id: it.id, field: it.field, tag: it.tag, en: it.en.trim() })), compare: checks.map((c) => ({ id: c.id, field: c.field, tag: c.tag, ko: c.ko.trim(), en: c.en.trim() })) },
-      null,
-      1,
-    ),
+    JSON.stringify(items.map((it) => ({ id: it.id, field: it.field, tag: it.tag, ko: it.ko.trim(), en: it.en.trim() })), null, 1),
     'INPUT>>>',
   ].join('\n')
 }

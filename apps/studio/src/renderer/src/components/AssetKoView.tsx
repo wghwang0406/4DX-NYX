@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { AlertTriangle, Undo2 } from 'lucide-react'
+import { Undo2 } from 'lucide-react'
 import { KO_PAIRS, koState, type Asset, type KoPair, type KoPairEn } from '@conti/domain'
+import type { KoChange } from '../../../shared/ipc'
 
 const errText = (e: unknown) => (e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
 const same = (a?: string, b?: string) => (a ?? '').trim() === (b ?? '').trim()
@@ -45,21 +46,26 @@ type Note = { text: string; changesKo: string[]; undo: { ko: string; en: string;
 /**
  * 펼친 에셋 카드 — 프롬프트를 한글로 보여주고, [KR]/[EN] 을 누르면 그 칸이 영문(생성에 실제로 쓰이는 문장)으로 바뀐다.
  * 글자를 누르면 그 자리에서 고친다: 한글을 고치면 AI 가 영문을 다시 써서 저장하고 "바뀐 점"을, 영문을 고치면 한글을 다시 옮긴다.
- * 한·영이 실제로 다를 때만(AI 비교 결과) 어디가 다른지 보여주고 어느 쪽 기준으로 맞출지 고르게 한다.
+ * 한·영은 앱이 자동으로 맞춘다(AssetsView) — 사람에게 어느 쪽 기준인지 묻지 않는다. 자동 맞춤으로 영문이 바뀐 칸만 한 줄 안내.
  */
 export default function AssetKoView({
   asset,
   ep,
   translating,
   failed,
-  onRetranslate,
+  autoNotes,
+  onRetry,
+  onDismissAuto,
 }: {
   asset: Asset
   ep: string
+  /** 자동 맞춤 진행 중 */
   translating: boolean
   failed?: string
-  /** 영문 기준으로 한글 다시 쓰기 (또는 실패한 번역 다시) */
-  onRetranslate: (fields?: KoPairEn[]) => void
+  /** 자동 맞춤으로 영문이 바뀐 칸 (AssetsView 가 들고 있다) */
+  autoNotes?: Partial<Record<KoPairEn, KoChange>>
+  onRetry: () => void
+  onDismissAuto: (field: KoPairEn) => void
 }) {
   const [lang, setLang] = useState<Record<string, 'ko' | 'en'>>({})
   const [editing, setEditing] = useState<string | null>(null) // `${field}:${lang}` 또는 'name'
@@ -96,7 +102,7 @@ export default function AssetKoView({
     setBusy((b) => ({ ...b, [p.en]: { text: '한글로 다시 옮기는 중…', shown: en } }))
     try {
       const s = await window.conti.api.assets.update(ep, asset.id, { [p.en]: en })
-      await window.conti.api.assets.translateKo(ep, [asset.id], [p.en])
+      await window.conti.api.assets.reconcileKo(ep, [asset.id], [p.en])
       setNotes((n) => ({ ...n, [p.en]: { text: `영문을 고쳤고 한글을 다시 옮겼습니다${s.staleShots ? ` · 콘티 ${s.staleShots}컷 재생성 필요` : ''}`, changesKo: [], undo } }))
     } catch (e) {
       setErr(errText(e))
@@ -106,11 +112,18 @@ export default function AssetKoView({
   }
 
   async function undo(p: KoPair) {
-    const n = notes[p.en]
-    if (!n) return
+    const local = notes[p.en]
+    const auto = autoNotes?.[p.en]
+    if (!local && !auto) return
     try {
-      await window.conti.api.assets.update(ep, asset.id, { [p.ko]: n.undo.ko, [p.en]: n.undo.en, koSyncRestore: { field: p.en, entry: n.undo.entry } })
+      if (local) await window.conti.api.assets.update(ep, asset.id, { [p.ko]: local.undo.ko, [p.en]: local.undo.en, koSyncRestore: { field: p.en, entry: local.undo.entry } })
+      else if (auto) {
+        // 자동 맞춤 되돌리기 = 예전 영문(생성용)을 그대로 두고 한글을 그 영문에서 다시 옮긴다 — 되돌려도 둘이 갈리지 않게
+        await window.conti.api.assets.update(ep, asset.id, { [p.en]: auto.undo.en })
+        await window.conti.api.assets.reconcileKo(ep, [asset.id], [p.en])
+      }
       setNotes((x) => Object.fromEntries(Object.entries(x).filter(([k]) => k !== p.en)))
+      onDismissAuto(p.en)
     } catch (e) {
       setErr(errText(e))
     }
@@ -141,16 +154,21 @@ export default function AssetKoView({
           const l = lang[p.en] ?? 'ko'
           const value = (l === 'ko' ? asset[p.ko] : asset[p.en]) ?? ''
           const b = busy[p.en]
-          const note = notes[p.en]
-          const diff = st === 'differs' ? (asset.koSync?.[p.en]?.diffKo ?? []) : []
+          const auto = autoNotes?.[p.en]
+          const note: Note | undefined =
+            notes[p.en] ??
+            (auto && {
+              text: `영문(생성용)을 한글에 맞췄습니다${auto.staleShots ? ` · 이 에셋이 나오는 콘티 ${auto.staleShots}컷 재생성 필요` : ''}`,
+              changesKo: auto.changesKo,
+              undo: auto.undo,
+            })
           const isEditing = editing === `${p.en}:${l}`
           return (
             <div key={p.en} data-pair={p.en} data-state={st}>
               <dt className="flex items-center justify-between gap-2 text-[10px] text-muted">
                 <span className="flex items-center gap-1">
                   {p.label}
-                  {(st === 'differs' || st === 'koNewer') && <AlertTriangle size={10} className="text-warn" />}
-                  {st === 'unknown' && translating && <span className="text-muted/70">· 한글·영문 비교 중…</span>}
+                  {translating && (st === 'unknown' || st === 'koNewer') && <span className="text-muted/70">· 한글·영문 맞추는 중…</span>}
                 </span>
                 {asset[p.en] && (
                   <button
@@ -208,32 +226,14 @@ export default function AssetKoView({
                 </div>
               )}
 
-              {(st === 'differs' || st === 'koNewer') && !b && (
-                <div className="mt-1 rounded bg-warn/10 px-2 py-1.5 text-[10.5px]" data-testid={`ko-off-${p.en}`}>
-                  <div className="text-warn">{st === 'koNewer' ? '한글만 바뀌어 생성용 영문에는 아직 반영되지 않았습니다.' : '한글과 생성용 영문의 내용이 다릅니다:'}</div>
-                  {diff.map((d, i) => (
-                    <div key={i} data-diff className="text-ink/85">
-                      · {d}
-                    </div>
-                  ))}
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    <button data-testid={`fix-en-${p.en}`} onClick={() => void koToEn(p, asset[p.ko] ?? '')} className="rounded border border-line px-1.5 py-0.5 hover:bg-panel-2">
-                      한글 기준으로 영문 고치기
-                    </button>
-                    <button data-testid={`fix-ko-${p.en}`} disabled={translating} onClick={() => onRetranslate([p.en])} className="rounded border border-line px-1.5 py-0.5 text-muted hover:text-ink disabled:opacity-50">
-                      영문 기준으로 한글 고치기
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )
         })}
         {(failed || err) && (
           <div className="text-[10.5px] text-warn">
-            {err ?? `한글로 옮기지 못했습니다: ${failed}`}{' '}
+            {err ?? `한·영을 맞추지 못했습니다: ${failed}`}{' '}
             {!err && (
-              <button className="underline" onClick={() => onRetranslate()}>
+              <button className="underline" onClick={() => onRetry()}>
                 다시
               </button>
             )}

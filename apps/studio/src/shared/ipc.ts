@@ -86,8 +86,8 @@ export interface Api {
     update(ep: string, id: string, patch: AssetPatch): Promise<{ staleShots: number }>
     /** 저장 전 — 고친 한글대로 영문을 다시 쓴다. AI 1회, 저장하지 않는다 */
     koToEn(ep: string, id: string, items: Array<{ field: KoPairEn; ko: string; en: string }>): Promise<Array<{ field: KoPairEn; en: string; changesKo: string[] }>>
-    /** 영문이 새것인 칸을 한글로 옮겨 저장 (여러 에셋 한 번에). force = 영문 기준으로 한글 다시 쓰기 */
-    translateKo(ep: string, ids: string[], force?: KoPairEn[]): Promise<{ translated: number; checked: number }>
+    /** 한·영 자동 맞춤 (번역 / 한글대로 영문 / 예전 칸 합치기). force = 그 칸을 영문 기준으로 다시 옮김. 영문이 바뀐 칸만 changes */
+    reconcileKo(ep: string, ids: string[], force?: KoPairEn[]): Promise<{ changes: KoChange[]; translated: number }>
   }
   md: {
     pending(): Promise<PendingChangeView[]>
@@ -106,7 +106,17 @@ export type AssetPatch = Partial<
   /** 저장 후 이 칸들의 한·영을 맞춰진 것으로 기록 (한글대로 영문을 다시 쓴 칸) */
   syncFields?: KoPairEn[]
   /** 되돌리기: 이 칸의 맞춤 기록을 예전 값으로 (null = 기록 없음) */
-  koSyncRestore?: { field: KoPairEn; entry: { en: string; ko: string; diffKo?: string[] } | null }
+  koSyncRestore?: { field: KoPairEn; entry: { en: string; ko: string } | null }
+}
+
+/** 자동 맞춤으로 영문(생성용)이 바뀐 칸 — 카드에 한 줄 안내 + 되돌리기 */
+export interface KoChange {
+  id: string
+  tag: string
+  field: KoPairEn
+  changesKo: string[]
+  staleShots: number
+  undo: { ko: string; en: string; entry: { en: string; ko: string } | null }
 }
 
 export type StoreChange = { type: 'project' } | { type: 'sequence'; seq: string } | { type: 'assets'; ep: string } | { type: 'md-pending'; count: number }

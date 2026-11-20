@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { Asset, AssetKind, EpId, KO_PAIRS, SeqId, withKoSync } from '@conti/domain'
+import { Asset, AssetKind, EpId, KO_PAIRS, SeqId } from '@conti/domain'
 import { defineTool } from '../context'
 import { ToolError, ok, omit, project as pick } from '../util'
 
@@ -19,7 +19,7 @@ const AssetInput = z.object({
   masterProfileEn: z.string().optional(),
   voiceEn: z.string().optional(),
   cameraAnchorEn: z.string().optional(),
-  // 영문 프롬프트의 한글 (사람이 읽고 고치는 쪽). 영문과 같은 호출에 함께 주면 서로 맞춰진 것으로 기록된다
+  // 영문 프롬프트의 한글 (사람이 읽고 고치는 쪽) — AI 는 보통 쓰지 않는다. 영문과 함께 주면 한글은 버려지고 앱이 영문을 번역한다
   cameraAnchorKo: z.string().optional(),
   masterProfileKo: z.string().optional(),
   voiceKo: z.string().optional(),
@@ -53,26 +53,22 @@ export const assetTools = [
   defineTool({
     name: 'assets_upsert',
     description:
-      '에셋을 만들거나 갱신한다. id(없으면 같은 tag)의 기존 에셋이 있으면 준 필드만 덮어쓰고, 없으면 새로 만든다. 저장 후 {ep}/character/Character.md 를 다시 쓴다. 외형(anchorEn 등)이 바뀌면 그 에셋이 나오는 콘티 샷이 stale 이 된다 (staleShots). 영문 필드를 바꿀 때는 그 한글(anchorEn↔descriptionKo, cameraAnchorEn↔cameraAnchorKo, masterProfileEn↔masterProfileKo, voiceEn↔voiceKo)도 같은 내용으로 함께 준다 — 팀은 한글을 읽는다.',
+      '에셋을 만들거나 갱신한다. id(없으면 같은 tag)의 기존 에셋이 있으면 준 필드만 덮어쓰고, 없으면 새로 만든다. 저장 후 {ep}/character/Character.md 를 다시 쓴다. 외형(anchorEn 등)이 바뀌면 그 에셋이 나오는 콘티 샷이 stale 이 된다 (staleShots). 외형·카메라·연기 프로필·Voice 는 영문 필드(anchorEn·cameraAnchorEn·masterProfileEn·voiceEn)만 쓴다 — 한글(descriptionKo 등)은 앱이 그 영문을 번역해 만든다. 영문과 함께 준 한글은 버려진다.',
     input: { ep: EpId, asset: AssetInput },
     handler: async ({ ep, asset }, { store }) => {
       const ea = await store.listAssets(ep)
       const existing = asset.id ? ea.assets.find((a) => a.id === asset.id) : ea.assets.find((a) => a.tag === asset.tag)
-      // 한·영을 같은 호출에 함께 준 칸 = 서로 맞춰진 것 (카드가 다시 번역하지 않는다)
-      let koSync = existing?.koSync
-      for (const p of KO_PAIRS) {
-        const en = asset[p.en]?.trim()
-        const ko = asset[p.ko]?.trim()
-        if (en && ko) koSync = withKoSync({ koSync }, p.en, { en, ko })
-      }
+      // 한 칸의 내용은 한 곳에서만 — 영문을 준 칸의 한글은 버린다 (앱이 그 영문을 번역해 한글을 만든다).
+      // 한글만 준 칸은 그대로 두면 앱이 한글대로 영문을 쓴다.
+      for (const p of KO_PAIRS) if (asset[p.en]?.trim() && p.ko in asset) delete (asset as Record<string, unknown>)[p.ko]
       if (existing) {
         // 준 필드만 덮어쓰고, 외형·뷰가 바뀌면 그 에셋이 나오는 콘티는 재생성 필요 (UI 카드 수정과 같은 규칙)
         const { id: _id, ...patch } = asset
-        const r = await store.patchAsset(ep, existing.id, { ...patch, koSync })
+        const r = await store.patchAsset(ep, existing.id, patch)
         return ok({ ok: true, id: r.asset.id, tag: r.asset.tag, rev: r.rev, created: false, staleShots: r.staleShots })
       }
       const given = Object.fromEntries(Object.entries(asset).filter(([, v]) => v !== undefined))
-      const merged = Asset.parse({ ...given, koSync, id: asset.id ?? randomUUID() })
+      const merged = Asset.parse({ ...given, id: asset.id ?? randomUUID() })
       const next = await store.upsertAsset(ep, merged)
       return ok({ ok: true, id: merged.id, tag: merged.tag, rev: next.rev, created: true, staleShots: 0 })
     },

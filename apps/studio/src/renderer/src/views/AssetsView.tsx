@@ -5,6 +5,7 @@ import { useProject } from '../state/project'
 import { fileUrl } from '../data/adapters'
 import AssetViewer from '../components/AssetViewer'
 import AssetKoView from '../components/AssetKoView'
+import type { KoChange } from '../../../shared/ipc'
 
 const KIND_LABEL = { char: '등장체', loc: '배경', prop: '소품' } as const
 const KIND_ICON = { char: User, loc: MapPin, prop: Package } as const
@@ -25,6 +26,7 @@ export default function AssetsView() {
   // 영문 프롬프트를 한글로 옮기는 중인 카드 / 실패 이유 (펼치면 자동으로 옮긴다)
   const [translating, setTranslating] = useState<Set<string>>(new Set())
   const [tFailed, setTFailed] = useState<Record<string, string>>({})
+  const [autoNotes, setAutoNotes] = useState<Record<string, Partial<Record<KoPairEn, KoChange>>>>({})
   const toggle = (id: string) =>
     setOpen((prev) => {
       const next = new Set(prev)
@@ -56,15 +58,21 @@ export default function AssetsView() {
     })
   }, [ep]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 영문 프롬프트 → 한글 (펼친 카드 중 한글이 없거나 영문이 나중에 바뀐 칸) + 예전 칸은 한·영 비교. 여러 카드를 묶어 AI 1회
+  // 한·영 자동 맞춤 — 한글 없는 칸 번역 / 한글만 바뀐 칸은 영문을 / 예전 에셋은 합쳐서 하나로. 화면을 열면 펼침과 상관없이
+  // 이 에피소드 전체를 돌고, 에셋이 바뀔 때마다 다시 본다. 여러 에셋을 묶어 AI 호출을 줄인다. 사람에게 묻지 않는다.
   const asked = useRef(new Set<string>())
-  async function translate(ids: string[], force?: KoPairEn[]) {
+  async function reconcile(ids: string[], force?: KoPairEn[]) {
     if (!ids.length) return
-    ids.forEach((id) => asked.current.add(id))
     setTranslating((s) => new Set([...s, ...ids]))
     setTFailed((f) => Object.fromEntries(Object.entries(f).filter(([k]) => !ids.includes(k))))
     try {
-      await window.conti.api.assets.translateKo(ep, ids, force)
+      const r = await window.conti.api.assets.reconcileKo(ep, ids, force)
+      if (r.changes.length)
+        setAutoNotes((n) => {
+          const next = { ...n }
+          for (const c of r.changes) next[c.id] = { ...(next[c.id] ?? {}), [c.field]: c }
+          return next
+        })
     } catch (e) {
       const msg = (e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
       setTFailed((f) => ({ ...f, ...Object.fromEntries(ids.map((id) => [id, msg])) }))
@@ -73,15 +81,14 @@ export default function AssetsView() {
     }
   }
   useEffect(() => {
-    const todoState = (a: Asset) => KO_PAIRS.filter((p) => ['enNewer', 'unknown'].includes(koState(a, p)))
-    const need = assets.filter((a) => open.has(a.id) && !translating.has(a.id) && !tFailed[a.id] && todoState(a).length)
-    // 같은 영문으로 두 번 부르지 않게 — 영문이 바뀌면(키가 달라지면) 다시
-    const key = (a: Asset) => `${a.id}:${KO_PAIRS.map((p) => a[p.en] ?? '').join('|').length}:${todoState(a).map((p) => p.en).join(',')}`
-    const todo = need.filter((a) => !asked.current.has(key(a)))
-    if (!todo.length) return
-    todo.forEach((a) => asked.current.add(key(a)))
-    void translate(todo.map((a) => a.id))
-  }, [open, assets]) // eslint-disable-line react-hooks/exhaustive-deps
+    const todo = (a: Asset) => KO_PAIRS.filter((p) => ['enNewer', 'koNewer', 'unknown'].includes(koState(a, p)))
+    // 같은 내용으로 두 번 부르지 않게 — 값이 바뀌면(키가 달라지면) 다시
+    const key = (a: Asset) => `${a.id}:${todo(a).map((p) => `${p.en}=${(a[p.en] ?? '').length}/${(a[p.ko] ?? '').length}`).join(',')}`
+    const need = assets.filter((a) => !translating.has(a.id) && !tFailed[a.id] && todo(a).length && !asked.current.has(key(a)))
+    if (!need.length) return
+    need.forEach((a) => asked.current.add(key(a)))
+    void reconcile(need.map((a) => a.id))
+  }, [assets]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function runSetup() {
     setErr(null)
@@ -175,7 +182,15 @@ export default function AssetsView() {
                       )}
                     </button>
                     {expanded && (
-                      <AssetKoView asset={a} ep={ep} translating={translating.has(a.id)} failed={tFailed[a.id]} onRetranslate={(fields) => void translate([a.id], fields)} />
+                      <AssetKoView
+                        asset={a}
+                        ep={ep}
+                        translating={translating.has(a.id)}
+                        failed={tFailed[a.id]}
+                        autoNotes={autoNotes[a.id]}
+                        onRetry={() => void reconcile([a.id])}
+                        onDismissAuto={(f) => setAutoNotes((n) => ({ ...n, [a.id]: Object.fromEntries(Object.entries(n[a.id] ?? {}).filter(([k]) => k !== f)) }))}
+                      />
                     )}
                     <div className="mt-2 flex gap-1.5">
                       {ASSET_VIEWS[kind].map((v) => {

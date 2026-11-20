@@ -58,14 +58,14 @@ describe('asset Korean/English pairs (koState)', () => {
     expect(koState(a, anchor)).toBe('unknown') // 예전 에셋: 둘 다 있는데 기록 없음
     expect(koState(a, voice)).toBe('enNewer') // 한글 없음 → 옮기면 된다
     expect(koState({ ...a, voiceEn: '' }, voice)).toBe('empty')
+    expect(koState({ ...a, anchorEn: '' }, anchor)).toBe('koNewer') // 한글만 있음 → 영문을 쓴다
     a.koSync = withKoSync(a, 'anchorEn', { en: 'neat hair', ko: '단정한 머리' })
     expect(koState(a, anchor)).toBe('synced')
     expect(koState({ ...a, anchorEn: 'messy hair' }, anchor)).toBe('enNewer')
     expect(koState({ ...a, descriptionKo: '흐트러진 머리' }, anchor)).toBe('koNewer')
     expect(koState({ ...a, anchorEn: 'neat  hair ' }, anchor)).toBe('synced') // 공백 차이는 무시
-    // 비교해 보니 다름 → differs, 한쪽을 고치면 다시 enNewer/koNewer
-    const d = { ...a, koSync: withKoSync(a, 'anchorEn', { en: 'neat hair', ko: '단정한 머리', diffKo: ['영문엔 붕대가 없음'] }) }
-    expect(koState(d, anchor)).toBe('differs')
-    expect(koState({ ...d, descriptionKo: '붕대' }, anchor)).toBe('koNewer')
+    // 예전 비교 기록(diffKo)이 남아 있으면 unknown 으로 보고 다시 합쳐 맞춘다
+    const d = { ...a, koSync: { anchorEn: { en: 'neat hair', ko: '단정한 머리', diffKo: ['영문엔 붕대가 없음'] } } }
+    expect(koState(d, anchor)).toBe('unknown')
   })
 })

@@ -806,17 +806,24 @@ describe('에셋 한·영 맞추기 프롬프트', () => {
 
   it('enToKo: batches several assets and fields with ids', async () => {
     const { enToKoPrompt, promptInput } = await import('./prompts/align')
-    const p = enToKoPrompt(
-      [
-        { id: 'a1', tag: '@의현', field: 'masterProfileEn', en: 'Character acting as 의현. ...' },
-        { id: 'a2', tag: '@loc_도로', field: 'anchorEn', en: 'A night road.' },
-      ],
-      [{ id: 'a1', tag: '@의현', field: 'anchorEn', en: 'short neat black hair', ko: '흐트러진 흑발' }],
-    )
+    const p = enToKoPrompt([
+      { id: 'a1', tag: '@의현', field: 'masterProfileEn', en: 'Character acting as 의현. ...' },
+      { id: 'a2', tag: '@loc_도로', field: 'anchorEn', en: 'A night road.' },
+    ])
     expect(p).toContain('(레퍼런스와 100% 동일)')
-    expect(p).toContain('Part 2 — "compare"')
-    const inp = promptInput<{ translate: Array<{ id: string }>; compare: Array<{ ko: string }> }>(p)!
-    expect(inp.translate.map((x) => x.id)).toEqual(['a1', 'a2'])
-    expect(inp.compare[0].ko).toBe('흐트러진 흑발')
+    expect(promptInput<Array<{ id: string }>>(p)!.map((x: { id: string }) => x.id)).toEqual(['a1', 'a2'])
+  })
+
+  it('mergeKoEn: old split pairs become one — English takes facts from both (Korean wins), Korean translates the final English', async () => {
+    const { mergeKoEnPrompt, promptInput, MERGE_KO_EN_SCHEMA } = await import('./prompts/align')
+    const p = mergeKoEnPrompt([
+      { id: 'a1', tag: '@해수', kind: 'char', field: 'anchorEn', ko: '흐트러진 단발, 오른팔 붕대', en: '28yo lean Korean woman, black bob. 100% matches the reference.' },
+      { id: 'a2', tag: '@loc_도로', kind: 'loc', field: 'cameraAnchorEn', ko: '높은 앵글', en: 'eye level wide' },
+    ])
+    expect(p).toContain('Where they contradict, the Korean wins')
+    expect(p).toContain('anchorEn (char): ONE sentence in the CINEDANCE anchor formula')
+    expect(p).toContain('cameraAnchorEn (loc): A camera anchor')
+    expect(promptInput<Array<{ id: string; ko: string }>>(p)!.map((x) => x.id)).toEqual(['a1', 'a2'])
+    expect(MERGE_KO_EN_SCHEMA.properties.items.items.required).toEqual(['id', 'field', 'en', 'ko', 'changesKo'])
   })
 })
