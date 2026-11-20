@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { Project, Sequence, EpisodeAssets, PROJECT_DIRS, type Asset, type Shot } from '@conti/domain'
+import { Project, Sequence, EpisodeAssets, Asset, PROJECT_DIRS, type Shot } from '@conti/domain'
 import { absPath, exists, readText, sha256, writeAtomic } from './fs'
 import { parseConfigMd, renderConfigMd } from './md/config'
 import { renderShotlistMd } from './md/shotlist'
@@ -12,6 +12,9 @@ import { renderCharacterMd } from './md/character'
  * ProjectStore — 프로젝트 상태의 단일 writer.
  * 진실은 .conti/*.json. md 파일(config.md, shotlist, Projectprompt 앵커 절)은 여기서 생성하는 뷰다.
  */
+/** 바뀌면 그 에셋이 나오는 콘티를 다시 그려야 하는 필드 (생성 프롬프트·레퍼런스에 들어가는 것) */
+export const VISUAL_ASSET_KEYS = ['anchorEn', 'cameraAnchorEn', 'descriptionKo', 'state', 'views'] as const
+
 export class ProjectStore {
   private project!: Project
   private sequences = new Map<string, Sequence>()
@@ -166,6 +169,21 @@ export class ProjectStore {
     await this.writeView(`${PROJECT_DIRS.character(ep)}/Character.md`, renderCharacterMd(next))
     this.emit({ type: 'assets', ep, assets: next })
     return next
+  }
+
+  /**
+   * 기존 에셋에 준 필드만 덮어쓴다 (UI 카드 수정 · MCP assets_upsert 공용).
+   * 외형 필드가 실제로 바뀌면 그 에셋이 나오는 콘티 컷을 재생성 필요(stale)로 표시한다.
+   */
+  async patchAsset(ep: string, id: string, patch: Partial<Omit<Asset, 'id'>>): Promise<{ asset: Asset; staleShots: number; rev: number }> {
+    const prev = (await this.listAssets(ep)).assets.find((a) => a.id === id)
+    if (!prev) throw new Error(`에셋 없음: ${id}`)
+    const given = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<Asset>
+    const asset = Asset.parse({ ...prev, ...given, id: prev.id })
+    const next = await this.upsertAsset(ep, asset)
+    const changed = VISUAL_ASSET_KEYS.some((k) => k in given && JSON.stringify(given[k]) !== JSON.stringify(prev[k]))
+    const staleShots = changed ? await this.markStaleByAsset(asset.tag) : 0
+    return { asset, staleShots, rev: next.rev }
   }
 
   // ── 내부 ────────────────────────────────────────────────────────────────

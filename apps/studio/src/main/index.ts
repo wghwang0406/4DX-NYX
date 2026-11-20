@@ -82,6 +82,7 @@ function createWindow(): BrowserWindow {
     if (process.env.CONTI_LAB) query.lab = '1'
     if (process.env.CONTI_EXPAND) query.expand = '1' // 캡처용: 에셋 카드 모두 펼침
     if (process.env.CONTI_VIEW) query.view = process.env.CONTI_VIEW // 캡처용: 에셋 이미지 크게 보기 (@태그:뷰)
+    if (process.env.CONTI_E2E_ASSET_EDIT) Object.assign(query, { nav: 'Assets', edit: process.env.CONTI_E2E_ASSET_EDIT }) // 에셋 카드 수정 모드로
     if (process.env.CONTI_VIDEO_UI) query.video = '1'
     if (process.env.CONTI_SETTINGS) query.settings = process.env.CONTI_SETTINGS
     void win.loadFile(join(__dirname, '../renderer/index.html'), Object.keys(query).length ? { query } : undefined)
@@ -172,6 +173,48 @@ function createWindow(): BrowserWindow {
           await js(`document.querySelector('[data-testid=import-close]').click()`)
           await wait(400)
           r.sourceList = await js(`document.querySelector('[data-testid=source-list]')?.innerText.slice(0, 120) ?? null`)
+        } catch (e) {
+          r.error = String((e as Error).stack ?? e)
+        }
+        await writeFile(out, JSON.stringify(r, null, 2))
+        app.quit()
+      }, 2500)
+    })
+  } else if (process.env.CONTI_E2E_ASSET_EDIT) {
+    // 에셋 카드 직접 수정: 한글 설명 고치기 → [한글대로 영문 맞추기](CONTI_FAKE_ANALYSIS 면 고정 응답) → 바뀐 점 표시 → [저장] → 안내·파일 반영
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(async () => {
+        const out = process.env.CONTI_E2E_OUT ?? '/tmp/conti-asset-edit.json'
+        const shots = process.env.CONTI_E2E_SHOTDIR
+        const js = (c: string) => win.webContents.executeJavaScript(c)
+        const wait = (ms: number) => new Promise((res) => setTimeout(res, ms))
+        const until = async (cond: string, ms: number) => {
+          for (let t = 0; t < ms; t += 250) {
+            if (await js(cond)) return true
+            await wait(250)
+          }
+          return false
+        }
+        const r: Record<string, unknown> = {}
+        try {
+          r.editorOpen = await until(`!!document.querySelector('[data-testid=asset-editor]')`, 6000)
+          r.before = await js(`({ ko: document.querySelector('[data-testid=edit-descriptionKo]')?.value, en: document.querySelector('[data-testid=edit-anchorEn]')?.value })`)
+          const ko = process.env.CONTI_E2E_ASSET_KO ?? '20대 후반 여성. 흐트러진 검은 단발, 낡은 네이비 야상, 오른팔에 얼룩진 천 붕대.'
+          // React 제어 textarea — 네이티브 setter 로 값을 넣고 input 이벤트
+          await js(`(() => { const el = document.querySelector('[data-testid=edit-descriptionKo]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, ${JSON.stringify(ko)}); el.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+          await wait(200)
+          r.warnKoOnly = await js(`document.querySelector('[data-testid=asset-editor]').textContent.includes('영문 앵커는 그대로입니다')`)
+          await js(`document.querySelector('[data-testid=align-anchor]').click()`)
+          r.aligned = await until(`!!document.querySelector('[data-testid=align-changes]')`, 120000)
+          r.afterAlign = await js(`({ en: document.querySelector('[data-testid=edit-anchorEn]').value, changes: [...document.querySelectorAll('[data-testid=align-changes] [data-change]')].map((d) => d.textContent) })`)
+          if (shots) await writeFile(join(shots, 'asset_edit_aligned.png'), (await win.webContents.capturePage()).toPNG())
+          if (process.env.CONTI_E2E_ASSET_SAVE !== '0') {
+            await js(`document.querySelector('[data-testid=asset-save]').click()`)
+            r.saved = await until(`!!document.querySelector('[data-testid=asset-notice]')`, 6000)
+            r.notice = await js(`document.querySelector('[data-testid=asset-notice]')?.textContent`)
+            r.cardEn = await js(`[...document.querySelectorAll('[data-testid=asset-detail] dd')].map((d) => d.textContent)[0]`)
+            if (shots) await writeFile(join(shots, 'asset_edit_saved.png'), (await win.webContents.capturePage()).toPNG())
+          }
         } catch (e) {
           r.error = String((e as Error).stack ?? e)
         }

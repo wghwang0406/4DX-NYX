@@ -13,3 +13,4 @@ export { JobService, JobCapError, JobRecord, JobStatus, TERMINAL, type JobEvent,
 export { RealCodexImage, CodexImageError, codexImageInstruction, classifyCodexError, type CodexImageRunner, type CodexImageRequest } from './codex-image'
 export { buildShotImagePrompt, finalStyleLine, imageViewsForShotSize, STORYBOARD_LINE, CLEAN_PLATE_LINE, type ImageRef, type ImageAnalysis } from './prompts/image'
 export { analyzeConti, driftCheck, needsAnalysis, analysisPrompt, ANALYSIS_SCHEMA, DRIFT_SCHEMA, type RunAi, type Shrink } from './conti2img'
+export { anchorAlignPrompt, ANCHOR_ALIGN_SCHEMA, type AnchorAlignDraft } from './prompts/align'

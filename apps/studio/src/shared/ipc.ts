@@ -82,6 +82,10 @@ export interface Api {
   }
   assets: {
     list(ep: string): Promise<Asset[]>
+    /** 카드에서 고친 칸만 저장. 외형이 바뀌면 그 에셋이 나오는 콘티 컷 수(staleShots)를 돌려준다 */
+    update(ep: string, id: string, patch: AssetPatch): Promise<{ staleShots: number }>
+    /** [한글대로 영문 맞추기] — AI 1회 호출, 저장하지 않는다 */
+    alignAnchor(ep: string, id: string, draft: { nameKo: string; descriptionKo: string; anchorEn: string }): Promise<{ anchorEn: string; changesKo: string[] }>
   }
   md: {
     pending(): Promise<PendingChangeView[]>
@@ -92,5 +96,8 @@ export interface Api {
     tools(): Promise<ToolStatus[]>
   }
 }
+
+/** 에셋 카드에서 직접 고칠 수 있는 칸 (tag·kind 는 샷이 참조하므로 고정) */
+export type AssetPatch = Partial<Pick<Asset, 'nameKo' | 'descriptionKo' | 'anchorEn' | 'cameraAnchorEn' | 'masterProfileEn' | 'voiceEn'>>
 
 export type StoreChange = { type: 'project' } | { type: 'sequence'; seq: string } | { type: 'assets'; ep: string } | { type: 'md-pending'; count: number }

@@ -783,3 +783,21 @@ afterAll(async () => {
   expect(served).toBeGreaterThan(0)
   await rm(join(tmpdir(), 'conti-gen-never'), { force: true, recursive: true })
 })
+
+describe('anchorAlignPrompt (에셋 카드 한글대로 영문 맞추기)', () => {
+  it('puts the Korean as source of truth, the current English for comparison and the per-kind formula', async () => {
+    const { anchorAlignPrompt, ANCHOR_ALIGN_SCHEMA } = await import('./prompts/align')
+    const draft = { nameKo: '의현', descriptionKo: '20대 중반의 마른 청년. 흑발이 흐트러져 있다. 오른팔에 얼룩진 천 붕대.', anchorEn: '24yo lean young Korean man, short neat black hair.' }
+    const p = anchorAlignPrompt({ tag: '@의현', kind: 'char', subkind: 'human', state: 'base' }, draft)
+    expect(p).toContain('Korean description (source of truth):\n20대 중반의 마른 청년')
+    expect(p).toContain('Current English anchor:\n24yo lean young Korean man')
+    expect(p).toContain('100% matches the reference.')
+    expect(p).toContain('character (human)')
+    const loc = anchorAlignPrompt({ tag: '@loc_도로_night', kind: 'loc', state: 'night' }, { ...draft, anchorEn: '' })
+    expect(loc).toContain('Places only')
+    expect(loc).toContain('state "night"')
+    expect(loc).toContain('(empty)')
+    expect(loc).not.toContain('100% matches the reference.')
+    expect(ANCHOR_ALIGN_SCHEMA.required).toEqual(['anchorEn', 'changesKo'])
+  })
+})

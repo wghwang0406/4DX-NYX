@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { ProjectStore, MdWatcher, readText, writeAtomic, sha256 } from '@conti/core'
 import { splitScenes, textToLines, seqIdFromSceneNumber, extractPdfLines, type SourceLine } from '@conti/screenplay'
 import { safeName } from '@conti/domain'
-import type { ImportPick, ImportPreview, ImportSourceInfo, StoreChange } from '../shared/ipc'
+import type { AssetPatch, ImportPick, ImportPreview, ImportSourceInfo, StoreChange } from '../shared/ipc'
 import { toolStatuses } from './diag'
 import { AgentHost } from './agent-host'
 import { AuthManager } from './auth'
@@ -379,12 +379,20 @@ export function registerIpc(getWindow: () => BrowserWindow | null) {
 
   // Api.assets.list 는 Asset[] 을 약속한다 — EpisodeAssets 통째로 보내면 렌더러의 .filter 가 터져 항상 "없음"이 됐다
   ipcMain.handle('assets:list', async (_e, ep: string) => (await requireStore().listAssets(ep)).assets)
+  ipcMain.handle('assets:update', async (_e, ep: string, id: string, patch: AssetPatch) => {
+    // 카드가 고칠 수 있는 칸만 통과 — tag·kind·views 는 여기서 못 바꾼다
+    const keys = ['nameKo', 'descriptionKo', 'anchorEn', 'cameraAnchorEn', 'masterProfileEn', 'voiceEn'] as const
+    const clean = Object.fromEntries(keys.filter((k) => typeof patch?.[k] === 'string').map((k) => [k, patch[k]!.trim()]))
+    const r = await requireStore().patchAsset(ep, id, clean)
+    return { staleShots: r.staleShots }
+  })
 
   const requireHost = () => {
     if (!host) throw new Error('열린 프로젝트가 없습니다')
     return host
   }
   ipcMain.handle('agent:availability', () => requireHost().availability())
+  ipcMain.handle('assets:alignAnchor', (_e, ep: string, id: string, draft: { nameKo: string; descriptionKo: string; anchorEn: string }) => requireHost().alignAnchor(ep, id, draft))
   ipcMain.handle('agent:threads', () => requireHost().listThreads())
   ipcMain.handle('agent:history', (_e, id: string) => requireHost().history(id))
   ipcMain.handle('agent:open', (_e, opts) => requireHost().open(opts))

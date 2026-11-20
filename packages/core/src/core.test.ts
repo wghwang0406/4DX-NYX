@@ -144,6 +144,40 @@ describe('ProjectStore', () => {
   })
 })
 
+describe('ProjectStore.patchAsset (에셋 카드 직접 수정)', () => {
+  it('changes only the given fields, marks drawn shots stale on a visual change, rewrites Character.md', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'conti-asset-'))
+    const store = await ProjectStore.create(root, { code: 'TST', title: '테스트' })
+    await store.upsertSequence({
+      seq: 'S41',
+      ep: 'EP01',
+      headingKo: '도로 - 밤',
+      shots: [
+        { id: 's1', no: '0010', characters: ['@의현'], stages: { conti: { status: 'review', currentVersionId: 'v1' } } },
+        { id: 's2', no: '0020', characters: ['@의현'] }, // 아직 안 그린 컷 — stale 대상 아님
+      ],
+    })
+    await store.upsertAsset('EP01', { id: 'a1', tag: '@의현', kind: 'char', nameKo: '의현', descriptionKo: '단정한 흑발', anchorEn: 'short neat black hair', state: 'base', views: {}, usedIn: ['S41'], voiceEn: 'calm' })
+
+    // 이름·Voice 만 → stale 없음
+    const r1 = await store.patchAsset('EP01', 'a1', { nameKo: '이의현', voiceEn: 'low and calm' })
+    expect(r1.staleShots).toBe(0)
+    expect(r1.asset).toMatchObject({ nameKo: '이의현', voiceEn: 'low and calm', anchorEn: 'short neat black hair', tag: '@의현' })
+
+    // 같은 값을 다시 줘도 stale 없음
+    expect((await store.patchAsset('EP01', 'a1', { anchorEn: 'short neat black hair' })).staleShots).toBe(0)
+
+    // 외형 → 콘티 있는 컷만 stale
+    const r2 = await store.patchAsset('EP01', 'a1', { descriptionKo: '흐트러진 흑발, 오른팔 붕대', anchorEn: 'messy black hair, stained cloth bandage on the right forearm' })
+    expect(r2.staleShots).toBe(1)
+    const shots = store.getSequence('S41')!.shots
+    expect(shots.find((x) => x.no === '0010')!.stages.conti.status).toBe('stale')
+    expect(shots.find((x) => x.no === '0020')!.stages.conti.status).toBe('none')
+    expect(await readFile(join(root, 'EP01/character/Character.md'), 'utf8')).toContain('stained cloth bandage')
+    await expect(store.patchAsset('EP01', 'nope', { nameKo: 'x' })).rejects.toThrow('에셋 없음')
+  })
+})
+
 describe('MdWatcher', () => {
   it('detects an external shotlist edit, proposes a patch, accept applies it and md is regenerated', async () => {
     const { writeFile } = await import('node:fs/promises')

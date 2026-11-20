@@ -9,7 +9,7 @@ import { createContiMcp, type JobView as McpJobView, type SpendKind, type SpendR
 import { adapters, pickAvailable, runStructured, type AgentEvent, type AgentKind, type AgentSession } from '@conti/agents'
 import { ProjectStore, writeAtomic, exists, readText } from '@conti/core'
 import { assetJobCount } from '@conti/domain'
-import { JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, analyzeConti, driftCheck, engineFor, expandNeighbors, planRequest, type JobEvent, type JobRecord, type RunAi } from '@conti/genengine'
+import { ANCHOR_ALIGN_SCHEMA, anchorAlignPrompt, JobService, ModelTable, RealCodexImage, RealHiggsfieldCli, analyzeConti, driftCheck, engineFor, expandNeighbors, planRequest, type JobEvent, type JobRecord, type RunAi } from '@conti/genengine'
 import type { AgentAvailability, AgentUiEvent, ChatMessage, JobView, SpendPreview, SpendRequestView, ThreadInfo } from '../shared/agent-ipc'
 import type { FeedbackItem } from '../shared/publish-ipc'
 import { log } from './log'
@@ -96,6 +96,10 @@ export class AgentHost {
     if (process.env.CONTI_FAKE_ANALYSIS) {
       return (async (req: { prompt: string; schema: Record<string, unknown> }) => {
         const props = (req.schema as { properties: Record<string, unknown> }).properties
+        if ('anchorEn' in props) {
+          const ko = /Korean description \(source of truth\):\n([\s\S]*?)\nCurrent English anchor:/.exec(req.prompt)?.[1] ?? ''
+          return { data: { anchorEn: `[fake] ${ko.replace(/\s+/g, ' ').trim()} 100% matches the reference.`, changesKo: ['머리: 단정함 → 흐트러짐 (fake)'] } }
+        }
         if ('checks' in props) return { data: { checks: [...req.prompt.matchAll(/- (\d{4}): generated image/g)].map((m) => ({ no: m[1], tag: '@?', ok: true })) } }
         const shots = [...req.prompt.matchAll(/- (\d{4}): storyboard = image \d+; listed size (\w+|\?); characters ([^;]*);/g)].map((m) => ({ no: m[1], shotSize: m[2] === '?' ? 'MS' : m[2], angleEn: 'eye-level', expressionEn: m[3] === 'none' ? '' : 'jaw set, a held blink', useConti: true, people: m[3] === 'none' ? 0 : m[3].split(',').length }))
         return { data: { shots, locationMapEn: /LOCATION MAP/.test(req.prompt) ? 'Camera at the road shoulder facing east; light from screen left.' : undefined } }
@@ -107,6 +111,19 @@ export class AgentHost {
       const r = await runStructured({ kind, cwd: this.store.root, prompt: req.prompt, images: req.images, schema: req.schema, timeoutMs: 240_000 })
       return { data: r.data }
     }) as unknown as RunAi
+  }
+
+  /** 에셋 카드 [한글대로 영문 맞추기] — 한글 설명을 기준으로 외형 앵커를 다시 쓴다. 텍스트만 보내고 저장하지 않는다 */
+  async alignAnchor(ep: string, id: string, draft: { nameKo: string; descriptionKo: string; anchorEn: string }): Promise<{ anchorEn: string; changesKo: string[] }> {
+    const a = (await this.store.listAssets(ep)).assets.find((x) => x.id === id)
+    if (!a) throw new Error(`에셋 없음: ${id}`)
+    if (!draft.descriptionKo.trim()) throw new Error('한글 설명이 비어 있어 맞출 기준이 없습니다')
+    const run = await this.aiRunner()
+    const r = await run<{ anchorEn: string; changesKo?: string[] }>({ prompt: anchorAlignPrompt(a, draft), images: [], schema: ANCHOR_ALIGN_SCHEMA as unknown as Record<string, unknown> })
+    const anchorEn = (r.data.anchorEn ?? '').replace(/\s+/g, ' ').trim()
+    if (!anchorEn) throw new Error('AI 가 빈 앵커를 돌려줬습니다 — 다시 눌러 보세요')
+    log('info', `영문 맞추기 ${a.tag}: ${draft.anchorEn.length}→${anchorEn.length}자`)
+    return { anchorEn, changesKo: (r.data.changesKo ?? []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 12) }
   }
 
   /** AI 에 보낼 크기(긴 변 1024 JPEG)로 줄인 임시 파일 */

@@ -36,6 +36,8 @@ const api: Api = {
   },
   assets: {
     list: (ep) => invoke('assets:list', ep),
+    update: (ep, id, patch) => invoke('assets:update', ep, id, patch),
+    alignAnchor: (ep, id, draft) => invoke('assets:alignAnchor', ep, id, draft),
   },
   md: {
     pending: () => invoke('md:pending'),

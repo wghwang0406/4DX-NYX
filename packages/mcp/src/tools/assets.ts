@@ -54,14 +54,16 @@ export const assetTools = [
     handler: async ({ ep, asset }, { store }) => {
       const ea = await store.listAssets(ep)
       const existing = asset.id ? ea.assets.find((a) => a.id === asset.id) : ea.assets.find((a) => a.tag === asset.tag)
+      if (existing) {
+        // 준 필드만 덮어쓰고, 외형·뷰가 바뀌면 그 에셋이 나오는 콘티는 재생성 필요 (UI 카드 수정과 같은 규칙)
+        const { id: _id, ...patch } = asset
+        const r = await store.patchAsset(ep, existing.id, patch)
+        return ok({ ok: true, id: r.asset.id, tag: r.asset.tag, rev: r.rev, created: false, staleShots: r.staleShots })
+      }
       const given = Object.fromEntries(Object.entries(asset).filter(([, v]) => v !== undefined))
-      const merged = Asset.parse({ ...(existing ?? {}), ...given, id: existing?.id ?? asset.id ?? randomUUID() })
+      const merged = Asset.parse({ ...given, id: asset.id ?? randomUUID() })
       const next = await store.upsertAsset(ep, merged)
-      // 외형·뷰가 바뀌면 그 에셋이 나오는 콘티는 재생성 필요 (증분 재생성)
-      const visual = ['anchorEn', 'cameraAnchorEn', 'descriptionKo', 'state', 'views'] as const
-      const changed = !!existing && visual.some((k) => k in given && JSON.stringify(given[k]) !== JSON.stringify(existing[k]))
-      const stale = changed ? await store.markStaleByAsset(merged.tag) : 0
-      return ok({ ok: true, id: merged.id, tag: merged.tag, rev: next.rev, created: !existing, staleShots: stale })
+      return ok({ ok: true, id: merged.id, tag: merged.tag, rev: next.rev, created: true, staleShots: 0 })
     },
   }),
 ]
